@@ -1584,9 +1584,17 @@ win_update(wp)
 	     */
 	    if (VIsual_mode == Ctrl_V)
 	    {
-		colnr_T	fromc, toc;
+		colnr_T	    fromc, toc;
+#if defined(FEAT_VIRTUALEDIT) && defined(FEAT_LINEBREAK)
+		int	    save_ve_flags = ve_flags;
 
+		if (curwin->w_p_lbr)
+		    ve_flags = VE_ALL;
+#endif
 		getvcols(wp, &VIsual, &curwin->w_cursor, &fromc, &toc);
+#if defined(FEAT_VIRTUALEDIT) && defined(FEAT_LINEBREAK)
+		ve_flags = save_ve_flags;
+#endif
 		++toc;
 		if (curwin->w_curswant == MAXCOL)
 		    toc = MAXCOL;
@@ -2834,6 +2842,9 @@ win_line(wp, lnum, startrow, endrow, nochange)
     unsigned	off;			/* offset in ScreenLines/ScreenAttrs */
     int		c = 0;			/* init for GCC */
     long	vcol = 0;		/* virtual column (for tabs) */
+#ifdef FEAT_LINEBREAK
+    long	vcol_sbr = -1;		/* virtual column after showbreak */
+#endif
     long	vcol_prev = -1;		/* "vcol" of previous character */
     char_u	*line;			/* current line */
     char_u	*ptr;			/* current position in "line" */
@@ -2977,7 +2988,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 #endif
 #define WL_LINE		WL_SBR + 1	/* text in the line */
     int		draw_state = WL_START;	/* what to draw next */
-#if defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
     int		feedback_col = 0;
     int		feedback_old_attr = -1;
 #endif
@@ -3702,7 +3713,12 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    char_attr = 0; /* was: hl_attr(HLF_AT); */
 #ifdef FEAT_DIFF
 		    if (diff_hlf != (hlf_T)0)
+		    {
 			char_attr = hl_attr(diff_hlf);
+			if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+			    char_attr = hl_combine_attr(char_attr,
+							    hl_attr(HLF_CUL));
+		    }
 #endif
 		    p_extra = NULL;
 		    c_extra = ' ';
@@ -3746,6 +3762,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    n_extra = (int)STRLEN(p_sbr);
 		    char_attr = hl_attr(HLF_AT);
 		    need_showbreak = FALSE;
+		    vcol_sbr = vcol + MB_CHARLEN(p_sbr);
 		    /* Correct end of highlighted area for 'showbreak',
 		     * required when 'linebreak' is also set. */
 		    if (tocol == vcol)
@@ -3753,7 +3770,8 @@ win_line(wp, lnum, startrow, endrow, nochange)
 #ifdef FEAT_SYN_HL
 		    /* combine 'showbreak' with 'cursorline' */
 		    if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
-			char_attr = hl_combine_attr(char_attr, HLF_CLN);
+			char_attr = hl_combine_attr(char_attr,
+							    hl_attr(HLF_CUL));
 #endif
 		}
 # endif
@@ -3850,9 +3868,15 @@ win_line(wp, lnum, startrow, endrow, nochange)
 				&& v >= (long)shl->startcol
 				&& v < (long)shl->endcol)
 			{
+#ifdef FEAT_MBYTE
+			    int tmp_col = v + MB_PTR2LEN(ptr);
+
+			    if (shl->endcol < tmp_col)
+				shl->endcol = tmp_col;
+#endif
 			    shl->attr_cur = shl->attr;
 			}
-			else if (v >= (long)shl->endcol)
+			else if (v == (long)shl->endcol)
 			{
 			    shl->attr_cur = 0;
 			    next_search_hl(wp, shl, lnum, (colnr_T)v, cur);
@@ -3931,6 +3955,8 @@ win_line(wp, lnum, startrow, endrow, nochange)
 							      && n_extra == 0)
 		    diff_hlf = HLF_CHD;		/* changed line */
 		line_attr = hl_attr(diff_hlf);
+		if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+		    line_attr = hl_combine_attr(line_attr, hl_attr(HLF_CUL));
 	    }
 #endif
 
@@ -4440,6 +4466,10 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    /* TODO: is passing p for start of the line OK? */
 		    n_extra = win_lbr_chartabsize(wp, line, p, (colnr_T)vcol,
 								    NULL) - 1;
+		    if (c == TAB && n_extra + col > W_WIDTH(wp))
+			n_extra = (int)wp->w_buffer->b_p_ts
+				       - vcol % (int)wp->w_buffer->b_p_ts - 1;
+
 		    c_extra = ' ';
 		    if (vim_iswhite(c))
 		    {
@@ -4490,11 +4520,19 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		if (c == TAB && (!wp->w_p_list || lcs_tab1))
 		{
 		    int tab_len = 0;
+		    long vcol_adjusted = vcol; /* removed showbreak length */
+#ifdef FEAT_LINEBREAK
+		    /* only adjust the tab_len, when at the first column
+		     * after the showbreak value was drawn */
+		    if (*p_sbr != NUL && vcol == vcol_sbr && wp->w_p_wrap)
+			vcol_adjusted = vcol - MB_CHARLEN(p_sbr);
+#endif
 		    /* tab amount depends on current column */
 		    tab_len = (int)wp->w_buffer->b_p_ts
-					- vcol % (int)wp->w_buffer->b_p_ts - 1;
+					- vcol_adjusted % (int)wp->w_buffer->b_p_ts - 1;
+
 #ifdef FEAT_LINEBREAK
-		    if (!wp->w_p_lbr)
+		    if (!wp->w_p_lbr || !wp->w_p_list)
 #endif
 		    /* tab amount depends on current column */
 			n_extra = tab_len;
@@ -4506,6 +4544,11 @@ win_line(wp, lnum, startrow, endrow, nochange)
 			int	i;
 			int	saved_nextra = n_extra;
 
+#ifdef FEAT_CONCEAL
+			if (is_concealing && vcol_off > 0)
+			    /* there are characters to conceal */
+			    tab_len += vcol_off;
+#endif
 			/* if n_extra > 0, it gives the number of chars, to
 			 * use for a tab, else we need to calculate the width
 			 * for a tab */
@@ -4531,6 +4574,12 @@ win_line(wp, lnum, startrow, endrow, nochange)
 #endif
 			}
 			p_extra = p_extra_free;
+#ifdef FEAT_CONCEAL
+			/* n_extra will be increased by FIX_FOX_BOGUSCOLS
+			 * macro below, so need to adjust for that here */
+			if (is_concealing && vcol_off > 0)
+			    n_extra -= vcol_off;
+#endif
 		    }
 #endif
 #ifdef FEAT_CONCEAL
@@ -4729,7 +4778,12 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    {
 			diff_hlf = HLF_CHD;
 			if (attr == 0 || char_attr != attr)
+			{
 			    char_attr = hl_attr(diff_hlf);
+			    if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+				char_attr = hl_combine_attr(char_attr,
+							    hl_attr(HLF_CUL));
+			}
 		    }
 # endif
 		}
@@ -4826,19 +4880,14 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		&& !attr_pri)
 	    char_attr = extra_attr;
 
-#if defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 	/* XIM don't send preedit_start and preedit_end, but they send
 	 * preedit_changed and commit.  Thus Vim can't set "im_is_active", use
 	 * im_is_preediting() here. */
-	if (
-# ifndef FEAT_GUI_MACVIM
-		xic != NULL &&
-# endif
-		lnum == wp->w_cursor.lnum
+	if (xic != NULL
+		&& lnum == wp->w_cursor.lnum
 		&& (State & INSERT)
-# ifndef FEAT_GUI_MACVIM
 		&& !p_imdisable
-# endif
 		&& im_is_preediting()
 		&& draw_state == WL_LINE)
 	{
@@ -4874,6 +4923,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 	 * special character (via 'listchars' option "precedes:<char>".
 	 */
 	if (lcs_prec_todo != NUL
+		&& wp->w_p_list
 		&& (wp->w_p_wrap ? wp->w_skipcol > 0 : wp->w_leftcol > 0)
 #ifdef FEAT_DIFF
 		&& filler_todo <= 0
@@ -5757,9 +5807,7 @@ screen_line(row, coloff, endcol, clear_width
 	    hl = ScreenAttrs[off_to + CHAR_CELLS];
 	    if (hl > HL_ALL)
 		hl = syn_attr2attr(hl);
-# ifndef FEAT_GUI_MACVIM /* see comment on subpixel antialiasing */
 	    if (hl & HL_BOLD)
-# endif
 		redraw_this = TRUE;
 	}
 #endif
@@ -5890,9 +5938,7 @@ screen_line(row, coloff, endcol, clear_width
 		hl = ScreenAttrs[off_to];
 		if (hl > HL_ALL)
 		    hl = syn_attr2attr(hl);
-# ifndef FEAT_GUI_MACVIM /* see comment on subpixel antialiasing */
 		if (hl & HL_BOLD)
-# endif
 		    redraw_next = TRUE;
 	    }
 #endif
@@ -5978,9 +6024,7 @@ screen_line(row, coloff, endcol, clear_width
 	    if (gui.in_use && (col > startCol || !redraw_this))
 	    {
 		hl = ScreenAttrs[off_to];
-# ifndef FEAT_GUI_MACVIM /* see comment on subpixel antialiasing */
 		if (hl > HL_ALL || (hl & HL_BOLD))
-# endif
 		{
 		    int prev_cells = 1;
 # ifdef FEAT_MBYTE
@@ -6030,7 +6074,7 @@ screen_line(row, coloff, endcol, clear_width
 	    int c;
 
 	    c = fillchar_vsep(&hl);
-	    if (ScreenLines[off_to] != c
+	    if (ScreenLines[off_to] != (schar_T)c
 # ifdef FEAT_MBYTE
 		    || (enc_utf8 && (int)ScreenLinesUC[off_to]
 						       != (c >= 0x80 ? c : 0))
@@ -7228,9 +7272,7 @@ screen_puts_len(text, textlen, row, col, attr)
 
 		if (n > HL_ALL)
 		    n = syn_attr2attr(n);
-# ifndef FEAT_GUI_MACVIM /* see comment on subpixel antialiasing */
 		if (n & HL_BOLD)
-# endif
 		    force_redraw_next = TRUE;
 	    }
 #endif
@@ -7564,6 +7606,12 @@ next_search_hl(win, shl, lnum, mincol, cur)
 	shl->lnum = lnum;
 	if (shl->rm.regprog != NULL)
 	{
+	    /* Remember whether shl->rm is using a copy of the regprog in
+	     * cur->match. */
+	    int regprog_is_copy = (shl != &search_hl && cur != NULL
+				&& shl == &cur->hl
+				&& cur->match.regprog == cur->hl.rm.regprog);
+
 	    nmatched = vim_regexec_multi(&shl->rm, win, shl->buf, lnum,
 		    matchcol,
 #ifdef FEAT_RELTIME
@@ -7572,6 +7620,10 @@ next_search_hl(win, shl, lnum, mincol, cur)
 		    NULL
 #endif
 		    );
+	    /* Copy the regprog, in case it got freed and recompiled. */
+	    if (regprog_is_copy)
+		cur->match.regprog = cur->hl.rm.regprog;
+
 	    if (called_emsg || got_int)
 	    {
 		/* Error while handling regexp: stop using this regexp. */
@@ -8184,12 +8236,6 @@ screen_fill(start_row, end_row, start_col, end_col, c1, c2, attr)
 #if defined(FEAT_GUI) || defined(UNIX)
 		    || force_next
 #endif
-#ifdef FEAT_GUI_MACVIM
-		    /* force a clear if the next char will be cleared (see
-		     * comment on subpixel antialiasing) */
-		    || (gui.in_use && col+1 < end_col
-						&& ScreenLines[off+1] != c)
-#endif
 		    )
 	    {
 #if defined(FEAT_GUI) || defined(UNIX)
@@ -8209,21 +8255,12 @@ screen_fill(start_row, end_row, start_col, end_col, c1, c2, attr)
 # endif
 		   )
 		{
-# ifndef FEAT_GUI_MACVIM
 		    if (ScreenLines[off] != ' '
 			    && (ScreenAttrs[off] > HL_ALL
 				|| ScreenAttrs[off] & HL_BOLD))
 			force_next = TRUE;
 		    else
 			force_next = FALSE;
-# else
-		    /* Mac OS X does subpixel antialiasing which often causes a
-		     * glyph to spill over into neighboring cells.  For this
-		     * reason we always clear the neighboring glyphs whenever a
-		     * glyph is cleared, just like other GUIs cope with the
-		     * bold trick. */
-		    force_next = (ScreenLines[off] != ' ');
-# endif
 		}
 #endif
 		ScreenLines[off] = c;
@@ -9890,14 +9927,13 @@ showmode()
 	    MSG_PUTS_ATTR("--", attr);
 #if defined(FEAT_XIM)
 	    if (
-# if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
+# ifdef FEAT_GUI_GTK
 		    preedit_get_status()
 # else
 		    im_get_status()
 # endif
 	       )
-# if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
-		/* most of the time, it's not XIM being used */
+# ifdef FEAT_GUI_GTK /* most of the time, it's not XIM being used */
 		MSG_PUTS_ATTR(" IM", attr);
 # else
 		MSG_PUTS_ATTR(" XIM", attr);
@@ -10203,9 +10239,9 @@ draw_tabline()
 			break;
 		    screen_puts_len(NameBuff, len, 0, col,
 #if defined(FEAT_SYN_HL)
-					   hl_combine_attr(attr, hl_attr(HLF_T))
+					 hl_combine_attr(attr, hl_attr(HLF_T))
 #else
-					   attr
+					 attr
 #endif
 					       );
 		    col += len;
@@ -10564,7 +10600,8 @@ win_redr_ruler(wp, always)
 	    this_ru_col = (WITH_WIDTH(width) + 1) / 2;
 	if (this_ru_col + o < WITH_WIDTH(width))
 	{
-	    while (this_ru_col + o < WITH_WIDTH(width))
+	    /* need at least 3 chars left for get_rel_pos() + NUL */
+	    while (this_ru_col + o < WITH_WIDTH(width) && RULER_BUF_LEN > i + 4)
 	    {
 #ifdef FEAT_MBYTE
 		if (has_mbyte)

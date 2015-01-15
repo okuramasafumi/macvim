@@ -1045,10 +1045,6 @@ wait_return(redraw)
 					|| c == K_RIGHTMOUSE
 					|| c == K_X1MOUSE
 					|| c == K_X2MOUSE))
-# ifdef FEAT_GUI_MACVIM
-				|| c == K_SWIPELEFT || c == K_SWIPERIGHT
-				|| c == K_SWIPEUP   || c == K_SWIPEDOWN
-# endif
 #endif
 				);
 	ui_breakcheck();
@@ -3856,7 +3852,7 @@ do_browse(flags, title, dflt, ext, initdir, filter, buf)
 	    filter = BROWSE_FILTER_DEFAULT;
 	if (flags & BROWSE_DIR)
 	{
-#  if defined(FEAT_GUI_GTK) || defined(WIN3264) || defined(FEAT_GUI_MACVIM)
+#  if defined(FEAT_GUI_GTK) || defined(WIN3264)
 	    /* For systems that have a directory dialog. */
 	    fname = gui_mch_browsedir(title, initdir);
 #  else
@@ -3864,9 +3860,9 @@ do_browse(flags, title, dflt, ext, initdir, filter, buf)
 	     * remove the file name. */
 	    fname = gui_mch_browse(0, title, dflt, ext, initdir, (char_u *)"");
 #  endif
-#  if !(defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#  if !defined(FEAT_GUI_GTK)
 	    /* Win32 adds a dummy file name, others return an arbitrary file
-	     * name.  GTK+ 2 and MacVim returns only the directory, */
+	     * name.  GTK+ 2 returns only the directory, */
 	    if (fname != NULL && *fname != NUL && !mch_isdir(fname))
 	    {
 		/* Remove the file name. */
@@ -4034,11 +4030,11 @@ tv_float(tvs, idxp)
  * pointer for resulting string argument if "str_m" is zero (as per ISO C99).
  *
  * The return value is the number of characters which would be generated
- * for the given input, excluding the trailing null. If this value
+ * for the given input, excluding the trailing NUL. If this value
  * is greater or equal to "str_m", not all characters from the result
  * have been stored in str, output bytes beyond the ("str_m"-1) -th character
  * are discarded. If "str_m" is greater than zero it is guaranteed
- * the resulting string will be null-terminated.
+ * the resulting string will be NUL-terminated.
  */
 
 /*

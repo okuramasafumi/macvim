@@ -1173,15 +1173,6 @@ doESCkey:
 	case K_MOUSERIGHT: /* Scroll wheel right */
 	    ins_mousescroll(MSCR_RIGHT);
 	    break;
-
-# ifdef FEAT_GUI_MACVIM
-	/* Gestures are ignored */
-	case K_SWIPELEFT:
-	case K_SWIPERIGHT:
-	case K_SWIPEUP:
-	case K_SWIPEDOWN:
-	    break;
-# endif
 #endif
 #ifdef FEAT_GUI_TABLINE
 	case K_TABLINE:
@@ -1192,7 +1183,6 @@ doESCkey:
 
 	case K_IGNORE:	/* Something mapped to nothing */
 	    break;
-
 
 #ifdef FEAT_AUTOCMD
 	case K_CURSORHOLD:	/* Didn't type something for a while. */
@@ -3649,12 +3639,7 @@ ins_compl_prep(c)
 
     /* Ignore end of Select mode mapping and mouse scroll buttons. */
     if (c == K_SELECT || c == K_MOUSEDOWN || c == K_MOUSEUP
-	    || c == K_MOUSELEFT || c == K_MOUSERIGHT
-# ifdef FEAT_GUI_MACVIM
-	    || c == K_SWIPELEFT || c == K_SWIPERIGHT || c == K_SWIPEUP
-	    || c == K_SWIPEDOWN
-# endif
-		    )
+	    || c == K_MOUSELEFT || c == K_MOUSERIGHT)
 	return retval;
 
     /* Set "compl_get_longest" when finding the first matches. */
@@ -4050,7 +4035,7 @@ expand_by_function(type, base)
 	goto theend;
     }
     curwin->w_cursor = pos;	/* restore the cursor position */
-    check_cursor();
+    validate_cursor();
     if (!equalpos(curwin->w_cursor, pos))
     {
 	EMSG(_(e_compldel));
@@ -5288,7 +5273,7 @@ ins_complete(c)
 		return FAIL;
 	    }
 	    curwin->w_cursor = pos;	/* restore the cursor position */
-	    check_cursor();
+	    validate_cursor();
 	    if (!equalpos(curwin->w_cursor, pos))
 	    {
 		EMSG(_(e_compldel));
@@ -6146,6 +6131,12 @@ internal_format(textwidth, second_indent, flags, format_only, c)
     int		no_leader = FALSE;
     int		do_comments = (flags & INSCHAR_DO_COM);
 #endif
+#ifdef FEAT_LINEBREAK
+    int		has_lbr = curwin->w_p_lbr;
+
+    /* make sure win_lbr_chartabsize() counts correctly */
+    curwin->w_p_lbr = FALSE;
+#endif
 
     /*
      * When 'ai' is off we don't want a space under the cursor to be
@@ -6498,6 +6489,9 @@ internal_format(textwidth, second_indent, flags, format_only, c)
     if (save_char != NUL)		/* put back space after cursor */
 	pchar_cursor(save_char);
 
+#ifdef FEAT_LINEBREAK
+    curwin->w_p_lbr = has_lbr;
+#endif
     if (!format_only && haveto_redraw)
     {
 	update_topline();
@@ -6783,13 +6777,19 @@ stop_arrow()
 {
     if (arrow_used)
     {
+	Insstart = curwin->w_cursor;	/* new insertion starts here */
+	if (Insstart.col > Insstart_orig.col && !ins_need_undo)
+	    /* Don't update the original insert position when moved to the
+	     * right, except when nothing was inserted yet. */
+	    update_Insstart_orig = FALSE;
+	Insstart_textlen = (colnr_T)linetabsize(ml_get_curline());
+
 	if (u_save_cursor() == OK)
 	{
 	    arrow_used = FALSE;
 	    ins_need_undo = FALSE;
 	}
-	Insstart = curwin->w_cursor;	/* new insertion starts here */
-	Insstart_textlen = (colnr_T)linetabsize(ml_get_curline());
+
 	ai_col = 0;
 #ifdef FEAT_VREPLACE
 	if (State & VREPLACE_FLAG)
@@ -6916,8 +6916,14 @@ stop_insert(end_insert_pos, esc, nomove)
 	    }
 	    if (curwin->w_cursor.lnum != tpos.lnum)
 		curwin->w_cursor = tpos;
-	    else if (cc != NUL)
-		++curwin->w_cursor.col;	/* put cursor back on the NUL */
+	    else
+	    {
+		/* reset tpos, could have been invalidated in the loop above */
+		tpos = curwin->w_cursor;
+		tpos.col++;
+		if (cc != NUL && gchar_pos(&tpos) == NUL)
+		    ++curwin->w_cursor.col;	/* put cursor back on the NUL */
+	    }
 
 	    /* <C-S-Right> may have started Visual mode, adjust the position for
 	     * deleted characters. */
@@ -8404,7 +8410,7 @@ ins_esc(count, cmdchar, nomove)
 
 	    (void)start_redo_ins();
 	    if (cmdchar == 'r' || cmdchar == 'v')
-		stuffReadbuff(ESC_STR);	/* no ESC in redo buffer */
+		stuffRedoReadbuff(ESC_STR);	/* no ESC in redo buffer */
 	    ++RedrawingDisabled;
 	    disabled_redraw = TRUE;
 	    return FALSE;	/* repeat the insert */
@@ -9200,9 +9206,6 @@ ins_mousescroll(dir)
 # ifdef FEAT_INS_EXPAND
     int		did_scroll = FALSE;
 # endif
-# ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-    int		scroll_wheel_force = 0;
-# endif
 
     tpos = curwin->w_cursor;
 
@@ -9231,35 +9234,19 @@ ins_mousescroll(dir)
 	    )
 # endif
     {
-# ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-	if (gui.in_use && gui.scroll_wheel_force >= 1)
-	{
-	    scroll_wheel_force = gui.scroll_wheel_force;
-	    if (scroll_wheel_force > 1000) scroll_wheel_force = 1000;
-	}
-	else
-	    scroll_wheel_force = dir >= 0 ? 3 : 6;
-# endif
 	if (dir == MSCR_DOWN || dir == MSCR_UP)
 	{
 	    if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))
 		scroll_redraw(dir,
 			(long)(curwin->w_botline - curwin->w_topline));
 	    else
-# ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-		scroll_redraw(dir, scroll_wheel_force);
-# else
 		scroll_redraw(dir, 3L);
-# endif
 	}
 #ifdef FEAT_GUI
 	else
 	{
 	    int val, step = 6;
 
-#  ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-	    step = scroll_wheel_force;
-#  endif
 	    if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))
 		step = W_WIDTH(curwin);
 	    val = curwin->w_leftcol + (dir == MSCR_RIGHT ? -step : step);
@@ -9374,7 +9361,7 @@ ins_left()
     tpos = curwin->w_cursor;
     if (oneleft() == OK)
     {
-#if defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 	/* Only call start_arrow() when not busy with preediting, it will
 	 * break undo.  K_LEFT is inserted in im_correct_cursor(). */
 	if (!im_is_preediting())

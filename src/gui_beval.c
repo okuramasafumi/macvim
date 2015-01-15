@@ -30,6 +30,7 @@ general_beval_cb(beval, state)
     long	winnr = 0;
     char_u	*bexpr;
     buf_T	*save_curbuf;
+    size_t	len;
 # ifdef FEAT_WINDOWS
     win_T	*cw;
 # endif
@@ -83,6 +84,16 @@ general_beval_cb(beval, state)
 	    vim_free(result);
 	    result = eval_to_string(bexpr, NULL, TRUE);
 
+	    /* Remove one trailing newline, it is added when the result was a
+	     * list and it's hardly every useful.  If the user really wants a
+	     * trailing newline he can add two and one remains. */
+	    if (result != NULL)
+	    {
+		len = STRLEN(result);
+		if (len > 0 && result[len - 1] == NL)
+		    result[len - 1] = NUL;
+	    }
+
 	    if (use_sandbox)
 		--sandbox;
 	    --textlock;
@@ -109,8 +120,8 @@ general_beval_cb(beval, state)
     recursive = FALSE;
 }
 
-/* on Win32 and MacVim only get_beval_info() is required */
-#if !(defined(FEAT_GUI_W32) || defined(FEAT_GUI_MACVIM)) || defined(PROTO)
+/* on Win32 only get_beval_info() is required */
+#if !defined(FEAT_GUI_W32) || defined(PROTO)
 
 #ifdef FEAT_GUI_GTK
 # include <gdk/gdkkeysyms.h>
@@ -295,7 +306,7 @@ gui_mch_currently_showing_beval()
     return current_beval;
 }
 #endif
-#endif /* !(FEAT_GUI_W32 || FEAT_GUI_MACVIM) */
+#endif /* !FEAT_GUI_W32 */
 
 #if defined(FEAT_SUN_WORKSHOP) || defined(FEAT_NETBEANS_INTG) \
     || defined(FEAT_EVAL) || defined(PROTO)
@@ -410,7 +421,7 @@ get_beval_info(beval, getword, winp, lnump, textp, colp)
     return FAIL;
 }
 
-# if !(defined(FEAT_GUI_W32) || defined(FEAT_GUI_MACVIM)) || defined(PROTO)
+# if !defined(FEAT_GUI_W32) || defined(PROTO)
 
 /*
  * Show a balloon with "mesg".
@@ -426,10 +437,10 @@ gui_mch_post_balloon(beval, mesg)
     else
 	undrawBalloon(beval);
 }
-# endif /* FEAT_GUI_W32 || FEAT_GUI_MACVIM */
+# endif /* FEAT_GUI_W32 */
 #endif /* FEAT_SUN_WORKSHOP || FEAT_NETBEANS_INTG || PROTO */
 
-#if !(defined(FEAT_GUI_W32) || defined(FEAT_GUI_MACVIM)) || defined(PROTO)
+#if !defined(FEAT_GUI_W32) || defined(PROTO)
 #if defined(FEAT_BEVAL_TIP) || defined(PROTO)
 /*
  * Hide the given balloon.
@@ -1340,6 +1351,6 @@ createBalloonEvalWindow(beval)
 }
 
 #endif /* !FEAT_GUI_GTK */
-#endif /* !(FEAT_GUI_W32 || FEAT_GUI_MACVIM) */
+#endif /* !FEAT_GUI_W32 */
 
 #endif /* FEAT_BEVAL */

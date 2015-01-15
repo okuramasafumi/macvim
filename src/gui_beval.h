@@ -37,9 +37,6 @@ typedef struct BalloonEvalStruct
     int			x;
     int			y;
     unsigned int	state;		/* Button/Modifier key state */
-#elif defined(FEAT_GUI_MACVIM)
-    int			x;
-    int			y;
 #else
 # if !defined(FEAT_GUI_W32)
     Widget		target;		/* widget we are monitoring */
@@ -65,8 +62,7 @@ typedef struct BalloonEvalStruct
     char_u		*msg;
     void		(*msgCB)__ARGS((struct BalloonEvalStruct *, int));
     void		*clientData;	/* For callback */
-#if !defined(FEAT_GUI_GTK) && !defined(FEAT_GUI_W32) \
-	&& !defined(FEAT_GUI_MACVIM)
+#if !defined(FEAT_GUI_GTK) && !defined(FEAT_GUI_W32)
     Dimension		screen_width;	/* screen width in pixels */
     Dimension		screen_height;	/* screen height in pixels */
 #endif

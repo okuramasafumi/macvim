@@ -56,6 +56,7 @@
  */
 #define PV_AI		OPT_BUF(BV_AI)
 #define PV_AR		OPT_BOTH(OPT_BUF(BV_AR))
+#define PV_BKC		OPT_BOTH(OPT_BUF(BV_BKC))
 #ifdef FEAT_QUICKFIX
 # define PV_BH		OPT_BUF(BV_BH)
 # define PV_BT		OPT_BUF(BV_BT)
@@ -140,9 +141,6 @@
 #define PV_ML		OPT_BUF(BV_ML)
 #define PV_MOD		OPT_BUF(BV_MOD)
 #define PV_MPS		OPT_BUF(BV_MPS)
-#ifdef FEAT_GUI_MACVIM
-#define PV_MMTA		OPT_BUF(BV_MMTA)
-#endif
 #define PV_NF		OPT_BUF(BV_NF)
 #ifdef FEAT_COMPL_FUNC
 # define PV_OFU		OPT_BUF(BV_OFU)
@@ -340,9 +338,6 @@ static int	p_lisp;
 #endif
 static int	p_ml;
 static int	p_ma;
-#ifdef FEAT_GUI_MACVIM
-static int	p_mmta;
-#endif
 static int	p_mod;
 static char_u	*p_mps;
 static char_u	*p_nf;
@@ -507,15 +502,12 @@ static struct vimoption
 #endif
 					    (char_u *)0L} SCRIPTID_INIT},
     {"antialias",   "anti", P_BOOL|P_VI_DEF|P_VIM|P_RCLR,
-#ifdef FEAT_ANTIALIAS
+#if defined(FEAT_GUI) && defined(MACOS_X)
 			    (char_u *)&p_antialias, PV_NONE,
+			    {(char_u *)FALSE, (char_u *)FALSE}
 #else
 			    (char_u *)NULL, PV_NONE,
-#endif
-#if FEAT_GUI_MACVIM
-			    {(char_u *)TRUE, (char_u *)0L}
-#else
-			    {(char_u *)FALSE, (char_u *)0L}
+			    {(char_u *)FALSE, (char_u *)FALSE}
 #endif
 			    SCRIPTID_INIT},
     {"arabic",	    "arab", P_BOOL|P_VI_DEF|P_VIM|P_CURSWANT,
@@ -591,7 +583,7 @@ static struct vimoption
 			    (char_u *)&p_bk, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
     {"backupcopy",  "bkc",  P_STRING|P_VIM|P_COMMA|P_NODUP,
-			    (char_u *)&p_bkc, PV_NONE,
+			    (char_u *)&p_bkc, PV_BKC,
 #ifdef UNIX
 			    {(char_u *)"yes", (char_u *)"auto"}
 #else
@@ -1263,22 +1255,6 @@ static struct vimoption
 			    {(char_u *)FALSE, (char_u *)0L}
 #endif
 			    SCRIPTID_INIT},
-    {"fullscreen",  "fu",   P_BOOL|P_NO_MKRC,
-#ifdef FEAT_FULLSCREEN
-			    (char_u *)&p_fullscreen, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
-			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
-    {"fuoptions",  "fuopt", P_STRING|P_COMMA|P_NODUP|P_VI_DEF,
-#ifdef FEAT_FULLSCREEN
-			    (char_u *)&p_fuoptions, PV_NONE,
-			    {(char_u *)"maxvert,maxhorz", (char_u *)0L}
-#else
-			    (char_u *)NULL, PV_NONE,
-			    {(char_u *)NULL, (char_u *)0L}
-#endif
-			    SCRIPTID_INIT},
     {"gdefault",    "gd",   P_BOOL|P_VI_DEF|P_VIM,
 			    (char_u *)&p_gd, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
@@ -1369,19 +1345,11 @@ static struct vimoption
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)50L, (char_u *)0L} SCRIPTID_INIT},
-    {"guioptions",  "go",   P_STRING|P_VI_DEF|P_RALL|P_FLAGLIST
-# ifdef FEAT_GUI_MACVIM
-	/* Scrollbars etc. may change the view, if this happens without a
-	 * redraw the display may get corrupted, so always redraw. */
-			    |P_RCLR
-# endif
-			    ,
+    {"guioptions",  "go",   P_STRING|P_VI_DEF|P_RALL|P_FLAGLIST,
 #if defined(FEAT_GUI)
 			    (char_u *)&p_go, PV_NONE,
 # if defined(UNIX) && !defined(MACOS)
 			    {(char_u *)"aegimrLtT", (char_u *)0L}
-# elif defined(FEAT_GUI_MACVIM)
-			    {(char_u *)"egmrL", (char_u *)0L}
 # else
 			    {(char_u *)"egmrLtT", (char_u *)0L}
 # endif
@@ -1511,7 +1479,7 @@ static struct vimoption
 #else
 			    (char_u *)NULL, PV_NONE,
 #endif
-#if defined(__sgi) || defined(FEAT_GUI_MACVIM)
+#ifdef __sgi
 			    {(char_u *)TRUE, (char_u *)0L}
 #else
 			    {(char_u *)FALSE, (char_u *)0L}
@@ -1723,6 +1691,13 @@ static struct vimoption
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
+    {"langnoremap",  "lnr",   P_BOOL|P_VI_DEF,
+#ifdef FEAT_LANGMAP
+			    (char_u *)&p_lnr, PV_NONE,
+#else
+			    (char_u *)NULL, PV_NONE,
+#endif
+			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
     {"laststatus",  "ls",   P_NUM|P_VI_DEF|P_RALL,
 #ifdef FEAT_WINDOWS
 			    (char_u *)&p_ls, PV_NONE,
@@ -1791,13 +1766,6 @@ static struct vimoption
 			    (char_u *)&p_macatsui, PV_NONE,
 			    {(char_u *)TRUE, (char_u *)0L} SCRIPTID_INIT},
 #endif
-    {"macmeta",	    "mmta", P_BOOL|P_VI_DEF,
-#ifdef FEAT_GUI_MACVIM
-			    (char_u *)&p_mmta, PV_MMTA,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
-			    {(char_u *)FALSE, (char_u *)0L}},
     {"magic",	    NULL,   P_BOOL|P_VI_DEF,
 			    (char_u *)&p_magic, PV_NONE,
 			    {(char_u *)TRUE, (char_u *)0L} SCRIPTID_INIT},
@@ -2164,6 +2132,15 @@ static struct vimoption
     {"remap",	    NULL,   P_BOOL|P_VI_DEF,
 			    (char_u *)&p_remap, PV_NONE,
 			    {(char_u *)TRUE, (char_u *)0L} SCRIPTID_INIT},
+    {"renderoptions", "rop", P_STRING|P_COMMA|P_RCLR|P_VI_DEF,
+#ifdef FEAT_RENDER_OPTIONS
+			    (char_u *)&p_rop, PV_NONE,
+			    {(char_u *)"", (char_u *)0L}
+#else
+			    (char_u *)NULL, PV_NONE,
+			    {(char_u *)NULL, (char_u *)0L}
+#endif
+			    SCRIPTID_INIT},
     {"report",	    NULL,   P_NUM|P_VI_DEF,
 			    (char_u *)&p_report, PV_NONE,
 			    {(char_u *)2L, (char_u *)0L} SCRIPTID_INIT},
@@ -2688,18 +2665,11 @@ static struct vimoption
 			    {(char_u *)"icons,tooltips", (char_u *)0L}
 			    SCRIPTID_INIT},
 #endif
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_TOOLBAR) && defined(FEAT_GUI_GTK)
     {"toolbariconsize",	"tbis", P_STRING|P_VI_DEF,
 			    (char_u *)&p_tbis, PV_NONE,
 			    {(char_u *)"small", (char_u *)0L} SCRIPTID_INIT},
 #endif
-    {"transparency",   "transp",  P_NUM|P_VIM|P_RCLR,
-#ifdef FEAT_TRANSPARENCY
-			    (char_u *)&p_transp, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
-			    {(char_u *)0L, (char_u *)0L} },
     {"ttimeout",    NULL,   P_BOOL|P_VI_DEF|P_VIM,
 			    (char_u *)&p_ttimeout, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
@@ -3027,7 +2997,7 @@ static char *(p_bg_values[]) = {"light", "dark", NULL};
 static char *(p_nf_values[]) = {"octal", "hex", "alpha", NULL};
 static char *(p_ff_values[]) = {FF_UNIX, FF_DOS, FF_MAC, NULL};
 #ifdef FEAT_CRYPT
-static char *(p_cm_values[]) = {"zip", "blowfish", NULL};
+static char *(p_cm_values[]) = {"zip", "blowfish", "blowfish2", NULL};
 #endif
 #ifdef FEAT_CMDL_COMPL
 static char *(p_wop_values[]) = {"tagfile", NULL};
@@ -3135,8 +3105,8 @@ static void fill_breakat_flags __ARGS((void));
 static int opt_strings_flags __ARGS((char_u *val, char **values, unsigned *flagp, int list));
 static int check_opt_strings __ARGS((char_u *val, char **values, int));
 static int check_opt_wim __ARGS((void));
-#ifdef FEAT_FULLSCREEN
-static int check_fuoptions __ARGS((char_u *, unsigned *, int *));
+#ifdef FEAT_LINEBREAK
+static int briopt_check __ARGS((win_T *wp));
 #endif
 
 /*
@@ -3150,9 +3120,6 @@ set_init_1()
     char_u	*p;
     int		opt_idx;
     long_u	n;
-#if defined(FEAT_GUI_MACVIM) && defined(FEAT_MBYTE)
-    int         did_mb_init;
-#endif
 
 #ifdef FEAT_LANGMAP
     langmap_init();
@@ -3510,22 +3477,7 @@ set_init_1()
 	    p_enc = vim_strsave((char_u *)"cp936");
 	    vim_free(p);
 	}
-#if defined(FEAT_GUI_MACVIM)
-	did_mb_init = (mb_init() == NULL);
-	if (!did_mb_init)
-	{
-            /* The encoding returned by enc_locale() was invalid, so fall back
-             * on using utf-8 as the default encoding in MacVim. */
-	    vim_free(p_enc);
-	    p_enc = vim_strsave((char_u *)"utf-8");
-	    did_mb_init = (mb_init() == NULL);
-	}
-
-	/* did_mb_init should always be TRUE, but check just in case. */
-	if (did_mb_init)
-#else
 	if (mb_init() == NULL)
-#endif
 	{
 	    opt_idx = findoption((char_u *)"encoding");
 	    if (opt_idx >= 0)
@@ -3700,6 +3652,9 @@ set_options_default(opt_flags)
 	win_comp_scroll(wp);
 #else
 	win_comp_scroll(curwin);
+#endif
+#ifdef FEAT_CINDENT
+    parse_cino(curbuf);
 #endif
 }
 
@@ -5325,10 +5280,6 @@ didset_options()
 #ifdef FEAT_FOLDING
     (void)opt_strings_flags(p_fdo, p_fdo_values, &fdo_flags, TRUE);
 #endif
-#ifdef FEAT_FULLSCREEN
-    (void)check_fuoptions(p_fuoptions, &fuoptions_flags, 
-            &fuoptions_bgcolor);
-#endif
     (void)opt_strings_flags(p_dy, p_dy_values, &dy_flags, TRUE);
 #ifdef FEAT_VIRTUALEDIT
     (void)opt_strings_flags(p_ve, p_ve_values, &ve_flags, TRUE);
@@ -5344,7 +5295,7 @@ didset_options()
 #if defined(FEAT_TOOLBAR) && !defined(FEAT_GUI_W32)
     (void)opt_strings_flags(p_toolbar, p_toolbar_values, &toolbar_flags, TRUE);
 #endif
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_TOOLBAR) && defined(FEAT_GUI_GTK)
     (void)opt_strings_flags(p_tbis, p_tbis_values, &tbis_flags, FALSE);
 #endif
 #ifdef FEAT_CMDWIN
@@ -5352,7 +5303,7 @@ didset_options()
     (void)check_cedit();
 #endif
 #ifdef FEAT_LINEBREAK
-    briopt_check();
+    briopt_check(curwin);
 #endif
 }
 
@@ -5469,6 +5420,7 @@ check_buf_options(buf)
 #ifdef FEAT_LISP
     check_string_option(&buf->b_p_lw);
 #endif
+    check_string_option(&buf->b_p_bkc);
 }
 
 /*
@@ -5623,6 +5575,7 @@ set_string_option_direct(name, opt_idx, val, opt_flags, set_sid)
 	if (idx < 0)	/* not found (should not happen) */
 	{
 	    EMSG2(_(e_intern2), "set_string_option_direct()");
+	    EMSG2(_("For option %s"), name);
 	    return;
 	}
     }
@@ -5786,17 +5739,32 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     }
 
     /* 'backupcopy' */
-    else if (varp == &p_bkc)
+    else if (gvarp == &p_bkc)
     {
-	if (opt_strings_flags(p_bkc, p_bkc_values, &bkc_flags, TRUE) != OK)
-	    errmsg = e_invarg;
-	if (((bkc_flags & BKC_AUTO) != 0)
-		+ ((bkc_flags & BKC_YES) != 0)
-		+ ((bkc_flags & BKC_NO) != 0) != 1)
+	char_u		*bkc = p_bkc;
+	unsigned int	*flags = &bkc_flags;
+
+	if (opt_flags & OPT_LOCAL)
 	{
-	    /* Must have exactly one of "auto", "yes"  and "no". */
-	    (void)opt_strings_flags(oldval, p_bkc_values, &bkc_flags, TRUE);
-	    errmsg = e_invarg;
+	    bkc = curbuf->b_p_bkc;
+	    flags = &curbuf->b_bkc_flags;
+	}
+
+	if ((opt_flags & OPT_LOCAL) && *bkc == NUL)
+	    /* make the local value empty: use the global value */
+	    *flags = 0;
+	else
+	{
+	    if (opt_strings_flags(bkc, p_bkc_values, flags, TRUE) != OK)
+		errmsg = e_invarg;
+	    if ((((int)*flags & BKC_AUTO) != 0)
+		    + (((int)*flags & BKC_YES) != 0)
+		    + (((int)*flags & BKC_NO) != 0) != 1)
+	    {
+		/* Must have exactly one of "auto", "yes"  and "no". */
+		(void)opt_strings_flags(oldval, p_bkc_values, flags, TRUE);
+		errmsg = e_invarg;
+	    }
 	}
     }
 
@@ -5811,7 +5779,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     /* 'breakindentopt' */
     else if (varp == &curwin->w_p_briopt)
     {
-	if (briopt_check() == FAIL)
+	if (briopt_check(curwin) == FAIL)
 	    errmsg = e_invarg;
     }
 #endif
@@ -6048,16 +6016,12 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 	    }
 	}
 
-# if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
+# if defined(FEAT_GUI_GTK)
 	if (errmsg == NULL && varp == &p_tenc && gui.in_use)
 	{
-	    /* MacVim and GTK+ 2 GUIs force 'tenc' to UTF-8. */
+	    /* GTK+ 2 uses only a single encoding, and that is UTF-8. */
 	    if (STRCMP(p_tenc, "utf-8") != 0)
-#  if defined(FEAT_GUI_MACVIM)
-		errmsg = (char_u *)N_("E617: Cannot be changed in MacVim");
-#  else
 		errmsg = (char_u *)N_("E617: Cannot be changed in the GTK+ 2 GUI");
-#  endif
 	}
 # endif
 
@@ -6207,7 +6171,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 # endif
 	if (STRCMP(curbuf->b_p_key, oldval) != 0)
 	    /* Need to update the swapfile. */
-	    ml_set_crypt_key(curbuf, oldval, get_crypt_method(curbuf));
+	    ml_set_crypt_key(curbuf, oldval, crypt_get_method_nr(curbuf));
     }
 
     else if (gvarp == &p_cm)
@@ -6218,7 +6182,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 	    p = p_cm;
 	if (check_opt_strings(p, p_cm_values, TRUE) != OK)
 	    errmsg = e_invarg;
-	else if (get_crypt_method(curbuf) > 0 && blowfish_self_test() == FAIL)
+	else if (crypt_self_test() == FAIL)
 	    errmsg = e_invarg;
 	else
 	{
@@ -6229,6 +6193,14 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 		    free_string_option(p_cm);
 		p_cm = vim_strsave((char_u *)"zip");
 		new_value_alloced = TRUE;
+	    }
+	    /* When using ":set cm=name" the local value is going to be empty.
+	     * Do that here, otherwise the crypt functions will still use the
+	     * local value. */
+	    if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0)
+	    {
+		free_string_option(curbuf->b_p_cm);
+		curbuf->b_p_cm = empty_option;
 	    }
 
 	    /* Need to update the swapfile when the effective method changed.
@@ -6244,7 +6216,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 		p = curbuf->b_p_cm;
 	    if (STRCMP(s, p) != 0)
 		ml_set_crypt_key(curbuf, curbuf->b_p_key,
-						 crypt_method_from_string(s));
+						crypt_method_nr_from_name(s));
 
 	    /* If the global value changes need to update the swapfile for all
 	     * buffers using that value. */
@@ -6255,7 +6227,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 		for (buf = firstbuf; buf != NULL; buf = buf->b_next)
 		    if (buf != curbuf && *buf->b_p_cm == NUL)
 			ml_set_crypt_key(buf, buf->b_p_key,
-					    crypt_method_from_string(oldval));
+					   crypt_method_nr_from_name(oldval));
 	    }
 	}
     }
@@ -6511,8 +6483,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 # endif
 	    if (p != NULL && gui_init_font(p_guifont, FALSE) != OK)
 	    {
-# if defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_PHOTON) \
-                || defined(FEAT_GUI_MACVIM)
+# if defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_PHOTON)
 		if (STRCMP(p_guifont, "*") == 0)
 		{
 		    /* Dialog was cancelled: Keep the old value without giving
@@ -6736,15 +6707,16 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
 #ifdef FEAT_SPELL
     /* When 'spelllang' or 'spellfile' is set and there is a window for this
      * buffer in which 'spell' is set load the wordlists. */
-    else if (varp == &(curbuf->b_s.b_p_spl) || varp == &(curbuf->b_s.b_p_spf))
+    else if (varp == &(curwin->w_s->b_p_spl)
+	    || varp == &(curwin->w_s->b_p_spf))
     {
 	win_T	    *wp;
 	int	    l;
 
-	if (varp == &(curbuf->b_s.b_p_spf))
+	if (varp == &(curwin->w_s->b_p_spf))
 	{
-	    l = (int)STRLEN(curbuf->b_s.b_p_spf);
-	    if (l > 0 && (l < 4 || STRCMP(curbuf->b_s.b_p_spf + l - 4,
+	    l = (int)STRLEN(curwin->w_s->b_p_spf);
+	    if (l > 0 && (l < 4 || STRCMP(curwin->w_s->b_p_spf + l - 4,
 								".add") != 0))
 		errmsg = e_invarg;
 	}
@@ -6906,8 +6878,8 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     }
 #endif
 
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
-    /* 'toolbariconsize': GTK+ 2 and MacVim only */
+#if defined(FEAT_TOOLBAR) && defined(FEAT_GUI_GTK)
+    /* 'toolbariconsize': GTK+ 2 only */
     else if (varp == &p_tbis)
     {
 	if (opt_strings_flags(p_tbis, p_tbis_values, &tbis_flags, FALSE) != OK)
@@ -7026,16 +6998,6 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     }
 #endif
 
-#ifdef FEAT_FULLSCREEN
-    /* 'fuoptions' */
-    else if (varp == &p_fuoptions)
-    {
-        if (check_fuoptions(p_fuoptions, &fuoptions_flags, 
-                    &fuoptions_bgcolor) != OK)
-	    errmsg = e_invarg;
-    }
-#endif
-    
 #ifdef FEAT_VIRTUALEDIT
     /* 'virtualedit' */
     else if (varp == &p_ve)
@@ -7083,6 +7045,14 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     {
 	/* TODO: recognize errors */
 	parse_cino(curbuf);
+    }
+#endif
+
+#if defined(FEAT_RENDER_OPTIONS)
+    else if (varp == &p_rop && gui.in_use)
+    {
+	if (!gui_mch_set_rendering_options(p_rop))
+	    errmsg = e_invarg;
     }
 #endif
 
@@ -7780,7 +7750,7 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 #endif
     }
 
-#if defined(FEAT_GUI) && !defined(FEAT_GUI_MACVIM)
+#ifdef FEAT_GUI
     else if ((int *)varp == &p_mh)
     {
 	if (!p_mh)
@@ -7932,40 +7902,6 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 	set_fileformat(curbuf->b_p_tx ? EOL_DOS : EOL_UNIX, opt_flags);
     }
 
-#ifdef FEAT_FULLSCREEN
-    /* when 'fullscreen' changes, forward it to the gui */
-    else if ((int *)varp == &p_fullscreen && (gui.in_use || gui.starting))
-    {
-	if (p_fullscreen && !old_value)
-	{
-            guicolor_T fg, bg;
-            if (fuoptions_flags & FUOPT_BGCOLOR_HLGROUP) 
-            {
-                /* Find out background color from colorscheme 
-                 * via highlight group id */
-                syn_id2colors(fuoptions_bgcolor, &fg, &bg);
-            } 
-            else
-            {
-                /* set explicit background color */
-                bg = fuoptions_bgcolor;
-            }
-            gui_mch_enter_fullscreen(fuoptions_flags, bg);
-	}
-        else if (!p_fullscreen && old_value)
-	{
-	    gui_mch_leave_fullscreen();
-	}
-    }
-#endif
-
-#if defined(FEAT_ANTIALIAS) && defined(FEAT_GUI_MACVIM)
-    else if ((int *)varp == &p_antialias)
-    {
-	gui_macvim_set_antialias(p_antialias);
-    }
-#endif
-
     /* when 'textauto' is set or reset also change 'fileformats' */
     else if ((int *)varp == &p_ta)
 	set_string_option_direct((char_u *)"ffs", -1,
@@ -8103,9 +8039,6 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 	    /* When the option is set from an autocommand, it may need to take
 	     * effect right away. */
 	    im_set_active(curbuf->b_p_iminsert == B_IMODE_IM);
-#ifdef FEAT_GUI_MACVIM
-	im_set_control(!p_imdisable);
-#endif
     }
 #endif
 
@@ -8640,20 +8573,6 @@ set_num_option(opt_idx, varp, value, errbuf, errbuflen, opt_flags)
     }
 #endif
 
-#if defined(FEAT_TRANSPARENCY)
-    /* 'transparency' is a number between 0 and 100 */
-    else if (pp == &p_transp)
-    {
-	if (p_transp < 0 || p_transp > 100)
-	{
-	    errmsg = e_invarg;
-            p_transp = old_value;
-	}
-        else if (gui.in_use)
-            gui_mch_new_colors();
-    }
-#endif
-
     else if (pp == &curbuf->b_p_tw)
     {
 	if (curbuf->b_p_tw < 0)
@@ -9132,12 +9051,13 @@ get_option_value_strict(name, numval, stringval, opt_type, from)
 }
 
 /*
- * Iterate over options. First argument is a pointer to a pointer to a structure 
- * inside options[] array, second is option type like in the above function.
+ * Iterate over options. First argument is a pointer to a pointer to a
+ * structure inside options[] array, second is option type like in the above
+ * function.
  *
- * If first argument points to NULL it is assumed that iteration just started 
+ * If first argument points to NULL it is assumed that iteration just started
  * and caller needs the very first value.
- * If first argument points to the end marker function returns NULL and sets 
+ * If first argument points to the end marker function returns NULL and sets
  * first argument to NULL.
  *
  * Returns full option name for current option on each call.
@@ -9963,6 +9883,10 @@ unset_global_local_option(name, from)
 	case PV_AR:
 	    buf->b_p_ar = -1;
 	    break;
+	case PV_BKC:
+	    clear_string_option(&buf->b_p_bkc);
+	    buf->b_bkc_flags = 0;
+	    break;
 	case PV_TAGS:
 	    clear_string_option(&buf->b_p_tags);
 	    break;
@@ -10068,6 +9992,7 @@ get_varp_scope(p, opt_flags)
 #ifdef FEAT_LISP
 	    case PV_LW:   return (char_u *)&(curbuf->b_p_lw);
 #endif
+	    case PV_BKC:  return (char_u *)&(curbuf->b_p_bkc);
 	}
 	return NULL; /* "cannot happen" */
     }
@@ -10100,6 +10025,8 @@ get_varp(p)
 				    ? (char_u *)&(curbuf->b_p_ar) : p->var;
 	case PV_TAGS:	return *curbuf->b_p_tags != NUL
 				    ? (char_u *)&(curbuf->b_p_tags) : p->var;
+	case PV_BKC:	return *curbuf->b_p_bkc != NUL
+				    ? (char_u *)&(curbuf->b_p_bkc) : p->var;
 #ifdef FEAT_FIND_ID
 	case PV_DEF:	return *curbuf->b_p_def != NUL
 				    ? (char_u *)&(curbuf->b_p_def) : p->var;
@@ -10271,9 +10198,6 @@ get_varp(p)
 #endif
 	case PV_ML:	return (char_u *)&(curbuf->b_p_ml);
 	case PV_MPS:	return (char_u *)&(curbuf->b_p_mps);
-#ifdef FEAT_GUI_MACVIM
-	case PV_MMTA:	return (char_u *)&(curbuf->b_p_mmta);
-#endif
 	case PV_MA:	return (char_u *)&(curbuf->b_p_ma);
 	case PV_MOD:	return (char_u *)&(curbuf->b_changed);
 	case PV_NF:	return (char_u *)&(curbuf->b_p_nf);
@@ -10348,6 +10272,9 @@ win_copy_options(wp_from, wp_to)
     wp_to->w_farsi = wp_from->w_farsi;
 #  endif
 # endif
+#if defined(FEAT_LINEBREAK)
+    briopt_check(wp_to);
+#endif
 }
 #endif
 
@@ -10683,9 +10610,6 @@ buf_copy_options(buf, flags)
 	    buf->b_p_keymap = vim_strsave(p_keymap);
 	    buf->b_kmap_state |= KEYMAP_INIT;
 #endif
-#ifdef FEAT_GUI_MACVIM
-	    buf->b_p_mmta = p_mmta;
-#endif
 	    /* This isn't really an option, but copying the langmap and IME
 	     * state from the current buffer is better than resetting it. */
 	    buf->b_p_iminsert = p_iminsert;
@@ -10695,6 +10619,8 @@ buf_copy_options(buf, flags)
 	     * are not copied, start using the global value */
 	    buf->b_p_ar = -1;
 	    buf->b_p_ul = NO_LOCAL_UNDOLEVEL;
+	    buf->b_p_bkc = empty_option;
+	    buf->b_bkc_flags = 0;
 #ifdef FEAT_QUICKFIX
 	    buf->b_p_gp = empty_option;
 	    buf->b_p_mp = empty_option;
@@ -12116,112 +12042,21 @@ find_mps_values(initc, findc, backwards, switchit)
     }
 }
 
-#ifdef FEAT_FULLSCREEN
-/*
- * Read the 'fuoptions' option, set fuoptions_flags and 
- * fuoptions_bgcolor.
- */
-    static int
-check_fuoptions(p_fuoptions, flags, bgcolor)
-    char_u	*p_fuoptions;	/* fuoptions string */
-    unsigned    *flags;         /* fuoptions flags */
-    int         *bgcolor;       /* background highlight group id */
-{
-    unsigned 	new_fuoptions_flags;
-    int         new_fuoptions_bgcolor;
-    char_u      *p;
-    char_u      hg_term;        /* character terminating
-                                   highlight group string in 
-                                   'background' option' */
-    int		i,j,k;
-
-    new_fuoptions_flags = 0;
-    new_fuoptions_bgcolor = 0xFF000000;
-
-    for (p = p_fuoptions; *p; ++p)
-    {
-	for (i = 0; ASCII_ISALPHA(p[i]); ++i)
-	    ;
-	if (p[i] != NUL && p[i] != ',' && p[i] != ':')
-	    return FAIL;
-        if (i == 10 && STRNCMP(p, "background", 10) == 0) 
-        {
-            if (p[i] != ':') return FAIL;
-            i++;
-            if (p[i] == NUL) return FAIL;
-            if (p[i] == '#')
-            {
-                /* explicit color (#aarrggbb) */
-                i++;
-                for (j = i; j < i+8 && vim_isxdigit(p[j]); ++j)
-                    ;
-                if (j < i+8)
-                    return FAIL;    /* less than 8 digits */
-                if (p[j] != NUL && p[j] != ',')
-                    return FAIL; 
-                new_fuoptions_bgcolor = 0;
-                for (k = 0; k < 8; k++) 
-                    new_fuoptions_bgcolor = new_fuoptions_bgcolor * 16 +
-                        hex2nr(p[i+k]);
-                i = j;
-                /* mark bgcolor as an explicit argb color */
-                new_fuoptions_flags &= ~FUOPT_BGCOLOR_HLGROUP;
-            } 
-            else
-            {
-                /* highlight group name */
-                for (j = i; ASCII_ISALPHA(p[j]); ++j)
-                    ;
-                if (p[j] != NUL && p[j] != ',')
-                    return FAIL;
-                hg_term = p[j];
-                p[j] = NUL;     /* temporarily terminate string */
-                new_fuoptions_bgcolor = syn_name2id((char_u*)(p+i));
-                p[j] = hg_term; /* restore string */
-                if (! new_fuoptions_bgcolor) 
-                    return FAIL;
-                i = j;
-                /* mark bgcolor as highlight group id */
-                new_fuoptions_flags |= FUOPT_BGCOLOR_HLGROUP;
-            }
-        }
-        else if (i == 7 && STRNCMP(p, "maxhorz", 7) == 0)
-	    new_fuoptions_flags |= FUOPT_MAXHORZ;
-        else if (i == 7 && STRNCMP(p, "maxvert", 7) == 0)
-	    new_fuoptions_flags |= FUOPT_MAXVERT;
-	else
-	    return FAIL;
-	p += i;
-	if (*p == NUL)
-	    break;
-        if (*p == ':')
-            return FAIL;
-    }
-
-    *flags = new_fuoptions_flags;
-    *bgcolor = new_fuoptions_bgcolor;
-
-    /* Let the GUI know, in case the background color has changed. */
-    gui_mch_fuopt_update();
-
-    return OK;
-}
-#endif
-
 #if defined(FEAT_LINEBREAK) || defined(PROTO)
 /*
  * This is called when 'breakindentopt' is changed and when a window is
  * initialized.
  */
-    int
-briopt_check()
+    static int
+briopt_check(wp)
+    win_T *wp;
 {
     char_u	*p;
     int		bri_shift = 0;
     long	bri_min = 20;
     int		bri_sbr = FALSE;
 
-    p = curwin->w_p_briopt;
+    p = wp->w_p_briopt;
     while (*p != NUL)
     {
 	if (STRNCMP(p, "shift:", 6) == 0
@@ -12246,10 +12081,20 @@ briopt_check()
 	    ++p;
     }
 
-    curwin->w_p_brishift = bri_shift;
-    curwin->w_p_brimin   = bri_min;
-    curwin->w_p_brisbr   = bri_sbr;
+    wp->w_p_brishift = bri_shift;
+    wp->w_p_brimin   = bri_min;
+    wp->w_p_brisbr   = bri_sbr;
 
     return OK;
 }
 #endif
+
+/*
+ * Get the local or global value of 'backupcopy'.
+ */
+    unsigned int
+get_bkc_value(buf)
+    buf_T *buf;
+{
+    return buf->b_bkc_flags ? buf->b_bkc_flags : bkc_flags;
+}

@@ -180,7 +180,7 @@ ui_inchar(buf, maxlen, wtime, tb_change_cnt)
 
 	/* ... there is no need for CTRL-C to interrupt something, don't let
 	 * it set got_int when it was mapped. */
-	if (mapped_ctrl_c)
+	if ((mapped_ctrl_c | curbuf->b_mapped_ctrl_c) & get_real_state())
 	    ctrl_c_interrupts = FALSE;
     }
 
@@ -254,17 +254,7 @@ ui_delay(msec, ignoreinput)
 	gui_wait_for_chars(msec);
     else
 #endif
-    {
-#if defined(FEAT_GUI_MACVIM)
-        /* MacVim tries to be conservative with flushing, but when Vim takes a
-         * nap it really must flush (else timed error messages might not appear
-         * etc.).  Note that gui_mch_wait_for_chars() already does force a
-         * flush, so only do it here. */
-        if (gui.in_use)
-            gui_macvim_force_flush();
-#endif
 	mch_delay(msec, ignoreinput);
-    }
 }
 
 /*
@@ -314,13 +304,7 @@ ui_get_shellsize()
     int	    retval;
 
 #ifdef FEAT_GUI
-    if (gui.in_use
-# ifdef FEAT_GUI_MACVIM
-            /* Avoid using terminal dimensions for GUI window.  MacVim
-             * autosaves the dimensions of the first window. */
-            || gui.starting
-# endif
-            )
+    if (gui.in_use)
 	retval = gui_get_shellsize();
     else
 #endif
@@ -571,6 +555,51 @@ clip_copy_selection(clip)
 	    clip_get_selection(clip);
 	clip_gen_set_selection(clip);
     }
+}
+
+/*
+ * Save and restore clip_unnamed before doing possibly many changes. This
+ * prevents accessing the clipboard very often which might slow down Vim
+ * considerably.
+ */
+
+/*
+ * Save clip_unnamed and reset it.
+ */
+    void
+start_global_changes()
+{
+    clip_unnamed_saved = clip_unnamed;
+
+    if (clip_did_set_selection > 0)
+    {
+	clip_unnamed = FALSE;
+	clip_did_set_selection = FALSE;
+    }
+}
+
+/*
+ * Restore clip_unnamed and set the selection when needed.
+ */
+    void
+end_global_changes()
+{
+    if (clip_did_set_selection == FALSE)  /* not when -1 */
+    {
+	clip_did_set_selection = TRUE;
+	clip_unnamed = clip_unnamed_saved;
+	if (clip_unnamed & CLIP_UNNAMED)
+	{
+	    clip_own_selection(&clip_star);
+	    clip_gen_set_selection(&clip_star);
+	}
+	if (clip_unnamed & CLIP_UNNAMED_PLUS)
+	{
+	    clip_own_selection(&clip_plus);
+	    clip_gen_set_selection(&clip_plus);
+	}
+    }
+    clip_unnamed_saved = FALSE;
 }
 
 /*
@@ -1106,11 +1135,7 @@ clip_invert_rectangle(row, col, height, width, invert)
 {
 #ifdef FEAT_GUI
     if (gui.in_use)
-# ifdef FEAT_GUI_MACVIM
-	gui_mch_invert_rectangle(row, col, height, width, invert);
-# else
 	gui_mch_invert_rectangle(row, col, height, width);
-#endif
     else
 #endif
 	screen_draw_rectangle(row, col, height, width, invert);
@@ -1448,6 +1473,15 @@ clip_gen_lose_selection(cbd)
 clip_gen_set_selection(cbd)
     VimClipboard	*cbd;
 {
+    if (!clip_did_set_selection)
+    {
+	/* Updating postponed, so that accessing the system clipboard won't
+	 * hang Vim when accessing it many times (e.g. on a :g comand). */
+	if (cbd == &clip_plus && (clip_unnamed_saved & CLIP_UNNAMED_PLUS))
+	    return;
+	else if (cbd == &clip_star && (clip_unnamed_saved & CLIP_UNNAMED))
+	    return;
+    }
 #ifdef FEAT_XCLIPBOARD
 # ifdef FEAT_GUI
     if (gui.in_use)
@@ -3121,8 +3155,7 @@ mouse_find_win(rowp, colp)
 
 #if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MAC) \
 	|| defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_PHOTON) || defined(PROTO) \
-	|| defined(FEAT_GUI_MACVIM)
+	|| defined(FEAT_GUI_PHOTON) || defined(PROTO)
 /*
  * Translate window coordinates to buffer position without any side effects
  */
@@ -3283,7 +3316,7 @@ im_save_status(psave)
      * And don't save when the GUI is running but our window doesn't have
      * input focus (e.g., when a find dialog is open). */
     if (!p_imdisable && KeyTyped && !KeyStuffed
-# if defined(FEAT_XIM) && !defined(FEAT_GUI_MACVIM)
+# ifdef FEAT_XIM
 	    && xic != NULL
 # endif
 # ifdef FEAT_GUI

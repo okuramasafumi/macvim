@@ -189,6 +189,13 @@ static char *(features[]) =
 #else
 	"-digraphs",
 #endif
+#ifdef FEAT_GUI_W32
+# ifdef FEAT_DIRECTX
+	"+directx",
+# else
+	"-directx",
+# endif
+#endif
 #ifdef FEAT_DND
 	"+dnd",
 #else
@@ -252,11 +259,6 @@ static char *(features[]) =
 	    /* only interesting on Unix systems */
 #if !defined(USE_SYSTEM) && defined(UNIX)
 	"+fork()",
-#endif
-#ifdef FEAT_FULLSCREEN
-	"+fullscreen",
-#else
-	"-fullscreen",
 #endif
 #ifdef FEAT_GETTEXT
 # ifdef DYNAMIC_GETTEXT
@@ -447,11 +449,6 @@ static char *(features[]) =
 #else
 	"-netbeans_intg",
 #endif
-#ifdef FEAT_ODB_EDITOR
-	"+odbeditor",
-#else
-	"-odbeditor",
-#endif
 #ifdef FEAT_GUI_W32
 # ifdef FEAT_OLE
 	"+ole",
@@ -637,11 +634,6 @@ static char *(features[]) =
 #else
 	"-toolbar",
 #endif
-#ifdef FEAT_TRANSPARENCY
-	"+transparency",
-#else
-	"-transparency",
-#endif
 #ifdef FEAT_USR_CMDS
 	"+user_commands",
 #else
@@ -749,6 +741,400 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    580,
+/**/
+    579,
+/**/
+    578,
+/**/
+    577,
+/**/
+    576,
+/**/
+    575,
+/**/
+    574,
+/**/
+    573,
+/**/
+    572,
+/**/
+    571,
+/**/
+    570,
+/**/
+    569,
+/**/
+    568,
+/**/
+    567,
+/**/
+    566,
+/**/
+    565,
+/**/
+    564,
+/**/
+    563,
+/**/
+    562,
+/**/
+    561,
+/**/
+    560,
+/**/
+    559,
+/**/
+    558,
+/**/
+    557,
+/**/
+    556,
+/**/
+    555,
+/**/
+    554,
+/**/
+    553,
+/**/
+    552,
+/**/
+    551,
+/**/
+    550,
+/**/
+    549,
+/**/
+    548,
+/**/
+    547,
+/**/
+    546,
+/**/
+    545,
+/**/
+    544,
+/**/
+    543,
+/**/
+    542,
+/**/
+    541,
+/**/
+    540,
+/**/
+    539,
+/**/
+    538,
+/**/
+    537,
+/**/
+    536,
+/**/
+    535,
+/**/
+    534,
+/**/
+    533,
+/**/
+    532,
+/**/
+    531,
+/**/
+    530,
+/**/
+    529,
+/**/
+    528,
+/**/
+    527,
+/**/
+    526,
+/**/
+    525,
+/**/
+    524,
+/**/
+    523,
+/**/
+    522,
+/**/
+    521,
+/**/
+    520,
+/**/
+    519,
+/**/
+    518,
+/**/
+    517,
+/**/
+    516,
+/**/
+    515,
+/**/
+    514,
+/**/
+    513,
+/**/
+    512,
+/**/
+    511,
+/**/
+    510,
+/**/
+    509,
+/**/
+    508,
+/**/
+    507,
+/**/
+    506,
+/**/
+    505,
+/**/
+    504,
+/**/
+    503,
+/**/
+    502,
+/**/
+    501,
+/**/
+    500,
+/**/
+    499,
+/**/
+    498,
+/**/
+    497,
+/**/
+    496,
+/**/
+    495,
+/**/
+    494,
+/**/
+    493,
+/**/
+    492,
+/**/
+    491,
+/**/
+    490,
+/**/
+    489,
+/**/
+    488,
+/**/
+    487,
+/**/
+    486,
+/**/
+    485,
+/**/
+    484,
+/**/
+    483,
+/**/
+    482,
+/**/
+    481,
+/**/
+    480,
+/**/
+    479,
+/**/
+    478,
+/**/
+    477,
+/**/
+    476,
+/**/
+    475,
+/**/
+    474,
+/**/
+    473,
+/**/
+    472,
+/**/
+    471,
+/**/
+    470,
+/**/
+    469,
+/**/
+    468,
+/**/
+    467,
+/**/
+    466,
+/**/
+    465,
+/**/
+    464,
+/**/
+    463,
+/**/
+    462,
+/**/
+    461,
+/**/
+    460,
+/**/
+    459,
+/**/
+    458,
+/**/
+    457,
+/**/
+    456,
+/**/
+    455,
+/**/
+    454,
+/**/
+    453,
+/**/
+    452,
+/**/
+    451,
+/**/
+    450,
+/**/
+    449,
+/**/
+    448,
+/**/
+    447,
+/**/
+    446,
+/**/
+    445,
+/**/
+    444,
+/**/
+    443,
+/**/
+    442,
+/**/
+    441,
+/**/
+    440,
+/**/
+    439,
+/**/
+    438,
+/**/
+    437,
+/**/
+    436,
+/**/
+    435,
+/**/
+    434,
+/**/
+    433,
+/**/
+    432,
+/**/
+    431,
+/**/
+    430,
+/**/
+    429,
+/**/
+    428,
+/**/
+    427,
+/**/
+    426,
+/**/
+    425,
+/**/
+    424,
+/**/
+    423,
+/**/
+    422,
+/**/
+    421,
+/**/
+    420,
+/**/
+    419,
+/**/
+    418,
+/**/
+    417,
+/**/
+    416,
+/**/
+    415,
+/**/
+    414,
+/**/
+    413,
+/**/
+    412,
+/**/
+    411,
+/**/
+    410,
+/**/
+    409,
+/**/
+    408,
+/**/
+    407,
+/**/
+    406,
+/**/
+    405,
+/**/
+    404,
+/**/
+    403,
+/**/
+    402,
+/**/
+    401,
+/**/
+    400,
+/**/
+    399,
+/**/
+    398,
+/**/
+    397,
+/**/
+    396,
+/**/
+    395,
+/**/
+    394,
+/**/
+    393,
+/**/
+    392,
+/**/
+    391,
+/**/
+    390,
+/**/
+    389,
+/**/
+    388,
+/**/
+    387,
+/**/
+    386,
+/**/
+    385,
+/**/
+    384,
 /**/
     383,
 /**/
@@ -1823,19 +2209,15 @@ list_version()
 #      if defined(MSWIN)
     MSG_PUTS(_("with GUI."));
 #      else
-#	if defined(FEAT_GUI_MACVIM)
-    MSG_PUTS(_("with MacVim GUI."));
-#	else
-#	 if defined(TARGET_API_MAC_CARBON) && TARGET_API_MAC_CARBON
+#	if defined(TARGET_API_MAC_CARBON) && TARGET_API_MAC_CARBON
     MSG_PUTS(_("with Carbon GUI."));
-#	 else
-#	  if defined(TARGET_API_MAC_OSX) && TARGET_API_MAC_OSX
+#	else
+#	 if defined(TARGET_API_MAC_OSX) && TARGET_API_MAC_OSX
     MSG_PUTS(_("with Cocoa GUI."));
-#	  else
-#	   if defined(MACOS)
+#	 else
+#	  if defined(MACOS)
     MSG_PUTS(_("with (classic) GUI."));
-#	   endif
-#         endif
+#	  endif
 #	 endif
 #	endif
 #      endif
@@ -2002,12 +2384,7 @@ intro_message(colon)
 	"",
 	N_("type  :q<Enter>               to exit         "),
 	N_("type  :help<Enter>  or  <F1>  for on-line help"),
-#ifdef FEAT_GUI_MACVIM
-        // TODO: Don't steal the show from version7 help?
-	N_("type  :help macvim<Enter>     for MacVim help "),
-#else
 	N_("type  :help version7<Enter>   for version info"),
-#endif
 	NULL,
 	"",
 	N_("Running in Vi compatible mode"),

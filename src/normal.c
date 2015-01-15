@@ -1380,6 +1380,9 @@ do_pending_operator(cap, old_col, gui_yank)
     pos_T	old_cursor;
     int		empty_region_error;
     int		restart_edit_save;
+#ifdef FEAT_LINEBREAK
+    int		lbr_saved = curwin->w_p_lbr;
+#endif
 
     /* The visual area is remembered for redo */
     static int	    redo_VIsual_mode = NUL; /* 'v', 'V', or Ctrl-V */
@@ -1413,6 +1416,10 @@ do_pending_operator(cap, old_col, gui_yank)
      */
     if ((finish_op || VIsual_active) && oap->op_type != OP_NOP)
     {
+#ifdef FEAT_LINEBREAK
+	/* Avoid a problem with unwanted linebreaks in block mode. */
+	curwin->w_p_lbr = FALSE;
+#endif
 	oap->is_VIsual = VIsual_active;
 	if (oap->motion_force == 'V')
 	    oap->motion_type = MLINE;
@@ -1812,7 +1819,13 @@ do_pending_operator(cap, old_col, gui_yank)
 			    || oap->op_type == OP_FUNCTION
 			    || oap->op_type == OP_FILTER)
 			&& oap->motion_force == NUL)
+		{
+#ifdef FEAT_LINEBREAK
+		    /* make sure redrawing is correct */
+		    curwin->w_p_lbr = lbr_saved;
+#endif
 		    redraw_curbuf_later(INVERTED);
+		}
 	    }
 	}
 
@@ -1856,7 +1869,12 @@ do_pending_operator(cap, old_col, gui_yank)
 		    || oap->op_type == OP_FOLD
 #endif
 		    ))
+	{
+#ifdef FEAT_LINEBREAK
+	    curwin->w_p_lbr = lbr_saved;
+#endif
 	    redraw_curbuf_later(INVERTED);
+	}
 
 	/*
 	 * If the end of an operator is in column one while oap->motion_type
@@ -1940,7 +1958,12 @@ do_pending_operator(cap, old_col, gui_yank)
 		}
 	    }
 	    else
+	    {
+#ifdef FEAT_LINEBREAK
+		curwin->w_p_lbr = lbr_saved;
+#endif
 		(void)op_yank(oap, FALSE, !gui_yank);
+	    }
 	    check_cursor_col();
 	    break;
 
@@ -1962,6 +1985,11 @@ do_pending_operator(cap, old_col, gui_yank)
 		else
 		    restart_edit_save = 0;
 		restart_edit = 0;
+#ifdef FEAT_LINEBREAK
+		/* Restore linebreak, so that when the user edits it looks as
+		 * before. */
+		curwin->w_p_lbr = lbr_saved;
+#endif
 		/* Reset finish_op now, don't want it set inside edit(). */
 		finish_op = FALSE;
 		if (op_change(oap))	/* will call edit() */
@@ -2057,8 +2085,16 @@ do_pending_operator(cap, old_col, gui_yank)
 		 * Visual mode.  But do this only once. */
 		restart_edit_save = restart_edit;
 		restart_edit = 0;
-
+#ifdef FEAT_LINEBREAK
+		/* Restore linebreak, so that when the user edits it looks as
+		 * before. */
+		curwin->w_p_lbr = lbr_saved;
+#endif
 		op_insert(oap, cap->count1);
+#ifdef FEAT_LINEBREAK
+		/* Reset linebreak, so that formatting works correctly. */
+		curwin->w_p_lbr = FALSE;
+#endif
 
 		/* TODO: when inserting in several lines, should format all
 		 * the lines. */
@@ -2083,7 +2119,14 @@ do_pending_operator(cap, old_col, gui_yank)
 	    }
 #ifdef FEAT_VISUALEXTRA
 	    else
+	    {
+#ifdef FEAT_LINEBREAK
+		/* Restore linebreak, so that when the user edits it looks as
+		 * before. */
+		curwin->w_p_lbr = lbr_saved;
+#endif
 		op_replace(oap, cap->nchar);
+	    }
 #endif
 	    break;
 
@@ -2127,7 +2170,12 @@ do_pending_operator(cap, old_col, gui_yank)
 	    if (!p_sol && oap->motion_type == MLINE && !oap->end_adjusted
 		    && (oap->op_type == OP_LSHIFT || oap->op_type == OP_RSHIFT
 						|| oap->op_type == OP_DELETE))
+	    {
+#ifdef FEAT_LINEBREAK
+		curwin->w_p_lbr = FALSE;
+#endif
 		coladvance(curwin->w_curswant = old_col);
+	    }
 	}
 	else
 	{
@@ -2136,6 +2184,9 @@ do_pending_operator(cap, old_col, gui_yank)
 	oap->block_mode = FALSE;
 	clearop(oap);
     }
+#ifdef FEAT_LINEBREAK
+    curwin->w_p_lbr = lbr_saved;
+#endif
 }
 
 /*
@@ -2637,8 +2688,7 @@ do_mouse(oap, c, dir, count, fixindent)
 	     * Windows only shows the popup menu on the button up event.
 	     */
 #if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_GTK) \
-	|| defined(FEAT_GUI_PHOTON) || defined(FEAT_GUI_MAC) \
-	|| defined(FEAT_GUI_MACVIM)
+			  || defined(FEAT_GUI_PHOTON) || defined(FEAT_GUI_MAC)
 	    if (!is_click)
 		return FALSE;
 #endif
@@ -2648,8 +2698,7 @@ do_mouse(oap, c, dir, count, fixindent)
 #endif
 #if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_GTK) \
 	    || defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MSWIN) \
-	    || defined(FEAT_GUI_MAC) || defined(FEAT_GUI_PHOTON) \
-	    || defined(FEAT_GUI_MACVIM)
+	    || defined(FEAT_GUI_MAC) || defined(FEAT_GUI_PHOTON)
 	    if (gui.in_use)
 	    {
 		jump_flags = 0;
@@ -3864,9 +3913,6 @@ add_to_showcmd(c)
 	K_MOUSEDOWN, K_MOUSEUP, K_MOUSELEFT, K_MOUSERIGHT,
 	K_X1MOUSE, K_X1DRAG, K_X1RELEASE, K_X2MOUSE, K_X2DRAG, K_X2RELEASE,
 	K_CURSORHOLD,
-# ifdef FEAT_GUI_MACVIM
-	K_SWIPELEFT, K_SWIPERIGHT, K_SWIPEUP, K_SWIPEDOWN,
-# endif
 	0
     };
 #endif
@@ -4514,13 +4560,21 @@ nv_screengo(oap, dir, dist)
 #if defined(FEAT_LINEBREAK) || defined(FEAT_MBYTE)
     if (curwin->w_cursor.col > 0 && curwin->w_p_wrap)
     {
+	colnr_T virtcol;
+
 	/*
 	 * Check for landing on a character that got split at the end of the
 	 * last line.  We want to advance a screenline, not end up in the same
 	 * screenline or move two screenlines.
 	 */
 	validate_virtcol();
-	if (curwin->w_virtcol > curwin->w_curswant
+	virtcol = curwin->w_virtcol;
+# if defined(FEAT_LINEBREAK)
+	if (virtcol > (colnr_T)width1 && *p_sbr != NUL)
+	    virtcol -= vim_strsize(p_sbr);
+# endif
+
+	if (virtcol > curwin->w_curswant
 		&& (curwin->w_curswant < (colnr_T)width1
 		    ? (curwin->w_curswant > (colnr_T)width1 / 2)
 		    : ((curwin->w_curswant - width1) % width2
@@ -4546,9 +4600,6 @@ nv_screengo(oap, dir, dist)
 nv_mousescroll(cap)
     cmdarg_T	*cap;
 {
-# ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-    int scroll_wheel_force = 0;
-# endif
 # ifdef FEAT_WINDOWS
     win_T *old_curwin = curwin;
 
@@ -4564,15 +4615,6 @@ nv_mousescroll(cap)
 	curbuf = curwin->w_buffer;
     }
 # endif
-# ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-    if (gui.in_use && gui.scroll_wheel_force >= 1)
-    {
-	scroll_wheel_force = gui.scroll_wheel_force;
-	if (scroll_wheel_force > 1000) scroll_wheel_force = 1000;
-    }
-    else
-	scroll_wheel_force = cap->arg >= 0 ? 3 : 6;
-# endif
 
     if (cap->arg == MSCR_UP || cap->arg == MSCR_DOWN)
     {
@@ -4582,13 +4624,8 @@ nv_mousescroll(cap)
 	}
 	else
 	{
-# ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-	    cap->count1 = scroll_wheel_force;
-	    cap->count0 = scroll_wheel_force;
-# else
 	    cap->count1 = 3;
 	    cap->count0 = 3;
-# endif
 	    nv_scroll_line(cap);
 	}
     }
@@ -4600,9 +4637,6 @@ nv_mousescroll(cap)
 	{
 	    int val, step = 6;
 
-#  ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-	    step = scroll_wheel_force;
-#  endif
 	    if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))
 		step = W_WIDTH(curwin);
 	    val = curwin->w_leftcol + (cap->arg == MSCR_RIGHT ? -step : +step);
@@ -5256,20 +5290,11 @@ handle_tabmenu()
     {
 	case TABLINE_MENU_CLOSE:
 	    if (current_tab == 0)
-#ifdef FEAT_GUI_MACVIM
-		do_cmdline_cmd((char_u *)"conf tabclose");
-#else
 		do_cmdline_cmd((char_u *)"tabclose");
-#endif
 	    else
 	    {
-#ifdef FEAT_GUI_MACVIM
-		vim_snprintf((char *)IObuff, IOSIZE, "conf tabclose %d",
-								 current_tab);
-#else
 		vim_snprintf((char *)IObuff, IOSIZE, "tabclose %d",
 								 current_tab);
-#endif
 		do_cmdline_cmd(IObuff);
 	    }
 	    break;
@@ -9300,7 +9325,7 @@ nv_put(cap)
 	if (cap->oap->op_type == OP_DELETE && cap->cmdchar == 'p')
 	{
 	    clearop(cap->oap);
-	    nv_diffgetput(TRUE);
+	    nv_diffgetput(TRUE, cap->opcount);
 	}
 	else
 #endif
@@ -9423,7 +9448,7 @@ nv_open(cap)
     if (cap->oap->op_type == OP_DELETE && cap->cmdchar == 'o')
     {
 	clearop(cap->oap);
-	nv_diffgetput(FALSE);
+	nv_diffgetput(FALSE, cap->opcount);
     }
     else
 #endif

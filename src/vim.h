@@ -125,13 +125,19 @@
     || defined(FEAT_GUI_GTK) \
     || defined(FEAT_GUI_ATHENA) \
     || defined(FEAT_GUI_MAC) \
-    || defined(FEAT_GUI_MACVIM) \
     || defined(FEAT_GUI_W32) \
     || defined(FEAT_GUI_W16) \
     || defined(FEAT_GUI_PHOTON)
 # define FEAT_GUI_ENABLED  /* also defined with NO_X11_INCLUDES */
 # if !defined(FEAT_GUI) && !defined(NO_X11_INCLUDES)
 #  define FEAT_GUI
+# endif
+#endif
+
+/* Check support for rendering options */
+#ifdef FEAT_GUI
+# if defined(FEAT_DIRECTX)
+#  define FEAT_RENDER_OPTIONS
 # endif
 #endif
 
@@ -556,8 +562,7 @@ typedef unsigned long u8char_T;	    /* long should be 32 bits or more */
  */
 #if defined(FEAT_XIM) \
     || (defined(FEAT_GUI) && (defined(FEAT_MBYTE_IME) || defined(GLOBAL_IME))) \
-    || (defined(FEAT_GUI_MAC) && defined(FEAT_MBYTE)) \
-    || defined(FEAT_GUI_MACVIM)
+    || (defined(FEAT_GUI_MAC) && defined(FEAT_MBYTE))
 # define USE_IM_CONTROL
 #endif
 
@@ -793,7 +798,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define EXPAND_HISTORY		41
 #define EXPAND_USER		42
 #define EXPAND_SYNTIME		43
-#define EXPAND_MACACTION	44
+#define EXPAND_USER_ADDR_TYPE	44
 
 /* Values for exmode_active (0 is no exmode) */
 #define EXMODE_NORMAL		1
@@ -831,6 +836,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define EW_ICASE	0x100	/* ignore case */
 #define EW_NOERROR	0x200	/* no error for bad regexp */
 #define EW_NOTWILD	0x400	/* add match with literal name if exists */
+#define EW_KEEPDOLLAR	0x800	/* do not escape $, $var is expanded */
 /* Note: mostly EW_NOTFOUND and EW_SILENT are mutually exclusive: EW_NOTFOUND
  * is used when executing commands and EW_SILENT for interactive expanding. */
 
@@ -1322,6 +1328,7 @@ enum auto_event
     EVENT_SHELLFILTERPOST,	/* after ":1,2!cmd", ":w !cmd", ":r !cmd". */
     EVENT_TEXTCHANGED,		/* text was modified */
     EVENT_TEXTCHANGEDI,		/* text was modified in Insert mode*/
+    EVENT_CMDUNDEFINED,		/* command undefined */
     NUM_EVENTS			/* MUST be the last one */
 };
 
@@ -1992,7 +1999,7 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 
 #ifndef FEAT_VIRTUALEDIT
 # define getvvcol(w, p, s, c, e) getvcol(w, p, s, c, e)
-# define virtual_active() 0
+# define virtual_active() FALSE
 # define virtual_op FALSE
 #endif
 
@@ -2271,7 +2278,7 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 #define AUTOLOAD_CHAR '#'
 
 #ifdef FEAT_EVAL
-# define SET_NO_HLSEARCH(flag) no_hlsearch = (flag); set_vim_var_nr(VV_HLSEARCH, !no_hlsearch)
+# define SET_NO_HLSEARCH(flag) no_hlsearch = (flag); set_vim_var_nr(VV_HLSEARCH, !no_hlsearch && p_hls)
 #else
 # define SET_NO_HLSEARCH(flag) no_hlsearch = (flag)
 #endif

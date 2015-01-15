@@ -1293,22 +1293,6 @@ CARBONGUI_BUNDLE = gui_bundle
 APPDIR = $(VIMNAME).app
 CARBONGUI_TESTARG = VIMPROG=../$(APPDIR)/Contents/MacOS/$(VIMTARGET)
 
-# MACVIM GUI
-MACVIMGUI_SRC	= gui.c gui_beval.c MacVim/gui_macvim.m MacVim/MMBackend.m \
-		  MacVim/MacVim.m
-MACVIMGUI_OBJ	= objects/gui.o objects/gui_beval.o objects/pty.o \
-		  objects/gui_macvim.o objects/MMBackend.o objects/MacVim.o
-MACVIMGUI_DEFS	= -DFEAT_GUI_MACVIM -Wall -Wno-unknown-pragmas -pipe
-MACVIMGUI_IPATH	=
-MACVIMGUI_LIBS_DIR =
-MACVIMGUI_LIBS1	= -framework Cocoa -framework Carbon
-MACVIMGUI_LIBS2	=
-MACVIMGUI_INSTALL = install_normal
-MACVIMGUI_TARGETS =
-MACVIMGUI_MAN_TARGETS =
-MACVIMGUI_TESTTARGET = gui
-MACVIMGUI_BUNDLE = macvim
-
 # All GUI files
 ALL_GUI_SRC  = gui.c gui_gtk.c gui_gtk_f.c gui_motif.c gui_xmdlg.c gui_xmebw.c gui_athena.c gui_gtk_x11.c gui_x11.c gui_at_sb.c gui_at_fs.c pty.c
 ALL_GUI_PRO  = gui.pro gui_gtk.pro gui_motif.pro gui_xmdlg.pro gui_athena.pro gui_gtk_x11.pro gui_x11.pro gui_w16.pro gui_w32.pro gui_photon.pro
@@ -1447,6 +1431,8 @@ BASIC_SRC = \
 	blowfish.c \
 	buffer.c \
 	charset.c \
+	crypt.c \
+	crypt_zip.c \
 	diff.c \
 	digraph.c \
 	edit.c \
@@ -1536,6 +1522,8 @@ OBJ_COMMON = \
 	objects/buffer.o \
 	objects/blowfish.o \
 	objects/charset.o \
+	objects/crypt.o \
+	objects/crypt_zip.o \
 	objects/diff.o \
 	objects/digraph.o \
 	objects/edit.o \
@@ -1605,6 +1593,8 @@ PRO_AUTO = \
 	blowfish.pro \
 	buffer.pro \
 	charset.pro \
+	crypt.pro \
+	crypt_zip.pro \
 	diff.pro \
 	digraph.pro \
 	edit.pro \
@@ -1769,10 +1759,11 @@ xxd/xxd$(EXEEXT): xxd/xxd.c
 languages:
 	@if test -n "$(MAKEMO)" -a -f $(PODIR)/Makefile; then \
 		cd $(PODIR); \
-		CC="$(CC)" $(MAKE) prefix=$(DESTDIR)$(prefix); \
+		  CC="$(CC)" $(MAKE) prefix=$(DESTDIR)$(prefix); \
 	fi
 	-@if test -n "$(MAKEMO)" -a -f $(PODIR)/Makefile; then \
-		cd $(PODIR); CC="$(CC)" $(MAKE) prefix=$(DESTDIR)$(prefix) converted; \
+		cd $(PODIR); \
+		  CC="$(CC)" $(MAKE) prefix=$(DESTDIR)$(prefix) converted; \
 	fi
 
 # Update the *.po files for changes in the sources.  Only run manually.
@@ -1788,13 +1779,12 @@ update-po:
 proto: $(PRO_AUTO) $(PRO_MANUAL)
 
 # Filter out arguments that cproto doesn't support.
-# Don't pass "-pthread" to cproto, it sees it as a list of individual flags.
-# Don't pass "-fstack-protector" to cproto, for the same reason.
-# Don't pass "-g" to cproto.
+# Don't pass "-pthread", "-fwrapv" and similar arguments to cproto, it sees
+# them as a list of individual flags.
 # The -E"gcc -E" argument must be separate to avoid problems with shell
 # quoting.
 CPROTO = cproto $(PROTO_FLAGS) -DPROTO \
-	 `echo '$(LINT_CFLAGS)' | sed -e 's/-pthread//g' -e 's/-fstack-protector//g' -e 's/\ -g\ / /g'`
+	 `echo '$(LINT_CFLAGS)' | sed -e 's/ -[a-z-]\+//g'`
 
 ### Would be nice if this would work for "normal" make.
 ### Currently it only works for (Free)BSD make.
@@ -1888,6 +1878,9 @@ test check:
 	cd testdir; $(MAKE) -f Makefile $(GUI_TESTTARGET) VIMPROG=../$(VIMTARGET) $(GUI_TESTARG) SCRIPTSOURCE=../$(SCRIPTSOURCE)
 	$(MAKE) -f Makefile unittest
 
+benchmark:
+	cd testdir; $(MAKE) -f Makefile benchmark VIMPROG=../$(VIMTARGET) SCRIPTSOURCE=../$(SCRIPTSOURCE)
+
 unittesttargets:
 	$(MAKE) -f Makefile $(UNITTEST_TARGETS)
 
@@ -1897,10 +1890,24 @@ unittest unittests: $(UNITTEST_TARGETS)
 	done
 
 # Run individual test, assuming that Vim was already compiled.
-test1 test2 test3 test4 test5 test6 test7 test8 test9 \
+test1 \
+	test_argument_count \
 	test_autoformat_join \
+	test_breakindent \
+	test_changelist \
+	test_close_count \
+	test_command_count \
 	test_eval \
+	test_insertcount \
+	test_listlbr \
+	test_listlbr_utf8 \
+	test_mapping \
 	test_options \
+	test_qf_title \
+	test_signs \
+	test_utf8 \
+	test_writefile \
+	test2 test3 test4 test5 test6 test7 test8 test9 \
 	test10 test11 test12 test13 test14 test15 test16 test17 test18 test19 \
 	test20 test21 test22 test23 test24 test25 test26 test27 test28 test29 \
 	test30 test31 test32 test33 test34 test35 test36 test37 test38 test39 \
@@ -2367,7 +2374,7 @@ uninstall_runtime:
 
 # Clean up all the files that have been produced, except configure's.
 # We support common typing mistakes for Juergen! :-)
-clean celan: testclean macvimclean
+clean celan: testclean
 	-rm -f *.o objects/* core $(VIMTARGET).core $(VIMTARGET) vim xxd/*.o
 	-rm -f $(TOOLS) auto/osdef.h auto/pathdef.c auto/if_perl.c
 	-rm -f conftest* *~ auto/link.sed
@@ -2480,13 +2487,8 @@ lintinstall:
 
 auto/if_perl.c: if_perl.xs
 	$(PERL) -e 'unless ( $$] >= 5.005 ) { for (qw(na defgv errgv)) { print "#define PL_$$_ $$_\n" }}' > $@
-	-@if test -e $(PERLSITELIB)/ExtUtils/xsubpp; then \
-		$(PERL) $(PERLSITELIB)/ExtUtils/xsubpp -prototypes -typemap \
-			$(PERLLIB)/ExtUtils/typemap if_perl.xs >> $@; \
-	else \
-		$(PERL) $(PERLLIB)/ExtUtils/xsubpp -prototypes -typemap \
-			$(PERLLIB)/ExtUtils/typemap if_perl.xs >> $@; \
-	fi
+	$(PERL) $(PERL_XSUBPP) -prototypes -typemap \
+	    $(PERLLIB)/ExtUtils/typemap if_perl.xs >> $@
 
 auto/osdef.h: auto/config.h osdef.sh osdef1.h.in osdef2.h.in
 	CC="$(CC) $(OSDEF_CFLAGS)" srcdir=$(srcdir) sh $(srcdir)/osdef.sh
@@ -2518,12 +2520,6 @@ auto/pathdef.c: Makefile auto/config.mk
 objects:
 	mkdir objects
 
-objects/MMBackend.o: MacVim/MMBackend.m
-	$(CCC) -fobjc-exceptions -o $@ MacVim/MMBackend.m
-
-objects/MacVim.o: MacVim/MacVim.m
-	$(CCC) -o $@ MacVim/MacVim.m
-
 objects/blowfish.o: blowfish.c
 	$(CCC) -o $@ blowfish.c
 
@@ -2532,6 +2528,12 @@ objects/buffer.o: buffer.c
 
 objects/charset.o: charset.c
 	$(CCC) -o $@ charset.c
+
+objects/crypt.o: crypt.c
+	$(CCC) -o $@ crypt.c
+
+objects/crypt_zip.o: crypt_zip.c
+	$(CCC) -o $@ crypt_zip.c
 
 objects/diff.o: diff.c
 	$(CCC) -o $@ diff.c
@@ -2616,9 +2618,6 @@ objects/gui_photon.o: gui_photon.c
 
 objects/gui_mac.o: gui_mac.c
 	$(CCC) -o $@ gui_mac.c
-
-objects/gui_macvim.o: MacVim/gui_macvim.m
-	$(CCC) -fobjc-exceptions -o $@ MacVim/gui_macvim.m
 
 objects/hangulin.o: hangulin.c
 	$(CCC) -o $@ hangulin.c
@@ -2870,18 +2869,6 @@ $(APPDIR)/Contents:
 	-$(SHELL) ./mkinstalldirs $(RESDIR)/English.lproj
 
 
-##############################################################################
-### MacVim GUI
-.PHONY: macvim macvimclean
-macvim: $(VIMTARGET)
-	xcodebuild -project MacVim/MacVim.xcodeproj $(XCODEFLAGS)
-
-macvimclean:
-	if test -d MacVim; then \
-		xcodebuild -project MacVim/MacVim.xcodeproj clean; \
-	fi
-
-
 ###############################################################################
 ### (automatically generated by 'make depend')
 ### Dependencies:
@@ -2897,6 +2884,14 @@ objects/charset.o: charset.c vim.h auto/config.h feature.h os_unix.h auto/osdef.
  ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
  gui_beval.h proto/gui_beval.pro ex_cmds.h proto.h globals.h farsi.h \
  arabic.h
+objects/crypt.o: crypt.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h \
+ ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
+ gui_beval.h proto/gui_beval.pro ex_cmds.h proto.h globals.h farsi.h \
+ arabic.h
+objects/crypt_zip.o: crypt_zip.c vim.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
+ regexp.h gui.h gui_beval.h proto/gui_beval.pro ex_cmds.h proto.h \
+ globals.h farsi.h arabic.h
 objects/diff.o: diff.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h \
  ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
  gui_beval.h proto/gui_beval.pro ex_cmds.h proto.h globals.h farsi.h \

@@ -739,7 +739,6 @@ debuggy_find(file, fname, after, gap, fp)
     struct debuggy *bp;
     int		i;
     linenr_T	lnum = 0;
-    regmatch_T	regmatch;
     char_u	*name = fname;
     int		prev_got_int;
 
@@ -771,8 +770,6 @@ debuggy_find(file, fname, after, gap, fp)
 #endif
 		(bp->dbg_lnum > after && (lnum == 0 || bp->dbg_lnum < lnum)))))
 	{
-	    regmatch.regprog = bp->dbg_prog;
-	    regmatch.rm_ic = FALSE;
 	    /*
 	     * Save the value of got_int and reset it.  We don't want a
 	     * previous interruption cancel matching, only hitting CTRL-C
@@ -780,7 +777,7 @@ debuggy_find(file, fname, after, gap, fp)
 	     */
 	    prev_got_int = got_int;
 	    got_int = FALSE;
-	    if (vim_regexec(&regmatch, name, (colnr_T)0))
+	    if (vim_regexec_prog(&bp->dbg_prog, FALSE, name, (colnr_T)0))
 	    {
 		lnum = bp->dbg_lnum;
 		if (fp != NULL)
@@ -1515,63 +1512,6 @@ browse_save_fname(buf)
 }
 #endif
 
-#ifdef FEAT_GUI_MACVIM
-/*
- * "Save changes" dialog that conforms to the Apple HIG.
- */
-    int
-vim_dialog_save_changes(buf)
-    buf_T	*buf;
-{
-    char_u	buff[IOSIZE];
-
-    dialog_msg(buff, _("Do you want to save the changes you made in the "
-			"document \"%s\"?"), buf->b_fname);
-    switch (do_dialog(VIM_QUESTION, buff,
-		(char_u*) _("Your changes will be lost if you don't save "
-			    "them."),
-		(buf->b_fname != NULL)
-		    ? (char_u *)_("&Save\n&Cancel\n&Don't Save")
-		    : (char_u *)_("&Save...\n&Cancel\n&Don't Save"),
-		1, NULL, FALSE))
-    {
-	case 1: return VIM_YES;
-	case 3: return VIM_NO;
-    }
-
-    return VIM_CANCEL;
-}
-
-/*
- * "Save all changes" dialog that tries to emulate the above "Save changes"
- * dialog for the case of several modified buffers.
- */
-    int
-vim_dialog_save_all_changes(buf)
-    buf_T	*buf;
-{
-    char_u	buff[IOSIZE];
-
-    dialog_msg(buff, _("There are several documents with unsaved changes. "
-			"Do you want to save the changes you made in the "
-			"document \"%s\"?"), buf->b_fname);
-    switch (do_dialog(VIM_QUESTION, buff,
-		(char_u*) _("Your changes will be lost if you don't save "
-			    "them."),
-		(char_u *)_("&Save\n&Don't Save\nS&ave All\nD&iscard All\n"
-			    "&Cancel"),
-		1, NULL, FALSE))
-    {
-	case 1: return VIM_YES;
-	case 2: return VIM_NO;
-	case 3: return VIM_ALL;
-	case 4: return VIM_DISCARDALL;
-    }
-
-    return VIM_CANCEL;
-}
-#endif
-
 /*
  * Ask the user what to do when abandoning a changed buffer.
  * Must check 'write' option first!
@@ -1586,19 +1526,6 @@ dialog_changed(buf, checkall)
     buf_T	*buf2;
     exarg_T     ea;
 
-#ifdef FEAT_GUI_MACVIM
-    /* Save dialogs on Mac OS X are standardized so in case the GUI is enabled
-     * and "c" isn't in 'guioptions' we use a OS X specific dialog. */
-    if (gui.in_use && vim_strchr(p_go, GO_CONDIALOG) == NULL)
-    {
-	if (checkall)
-	    ret = vim_dialog_save_all_changes(buf);
-	else
-	    ret = vim_dialog_save_changes(buf);
-    }
-    else
-    {
-#endif
     dialog_msg(buff, _("Save changes to \"%s\"?"),
 			(buf->b_fname != NULL) ?
 			buf->b_fname : (char_u *)_("Untitled"));
@@ -1606,9 +1533,6 @@ dialog_changed(buf, checkall)
 	ret = vim_dialog_yesnoallcancel(VIM_QUESTION, NULL, buff, 1);
     else
 	ret = vim_dialog_yesnocancel(VIM_QUESTION, NULL, buff, 1);
-#ifdef FEAT_GUI_MACVIM
-    }
-#endif
 
     /* Init ea pseudo-structure, this is needed for the check_overwrite()
      * function. */
@@ -2537,6 +2461,9 @@ ex_listdo(eap)
 	 * great speed improvement. */
 	save_ei = au_event_disable(",Syntax");
 #endif
+#ifdef FEAT_CLIPBOARD
+    start_global_changes();
+#endif
 
     if (eap->cmdidx == CMD_windo
 	    || eap->cmdidx == CMD_tabdo
@@ -2545,15 +2472,36 @@ ex_listdo(eap)
 				    | (eap->forceit ? CCGD_FORCEIT : 0)
 				    | CCGD_EXCMD))
     {
-	/* start at the first argument/window/buffer */
 	i = 0;
+	/* start at the eap->line1 argument/window/buffer */
 #ifdef FEAT_WINDOWS
 	wp = firstwin;
 	tp = first_tabpage;
 #endif
+	switch (eap->cmdidx)
+	{
+#ifdef FEAT_WINDOWS
+	    case CMD_windo:
+		for ( ; wp != NULL && i + 1 < eap->line1; wp = wp->w_next)
+		    i++;
+		break;
+	    case CMD_tabdo:
+		for( ; tp != NULL && i + 1 < eap->line1; tp = tp->tp_next)
+		    i++;
+		break;
+#endif
+	    case CMD_argdo:
+		i = eap->line1 - 1;
+		break;
+	    case CMD_bufdo:
+		i = eap->line1;
+		break;
+	    default:
+		break;
+	}
 	/* set pcmark now */
 	if (eap->cmdidx == CMD_bufdo)
-	    goto_buffer(eap, DOBUF_FIRST, FORWARD, 0);
+	    goto_buffer(eap, DOBUF_FIRST, FORWARD, i);
 	else
 	    setpcmark();
 	listcmd_busy = TRUE;	    /* avoids setting pcmark below */
@@ -2579,7 +2527,6 @@ ex_listdo(eap)
 		}
 		if (curwin->w_arg_idx != i)
 		    break;
-		++i;
 	    }
 #ifdef FEAT_WINDOWS
 	    else if (eap->cmdidx == CMD_windo)
@@ -2614,6 +2561,8 @@ ex_listdo(eap)
 		    }
 	    }
 
+	    ++i;
+
 	    /* execute the command */
 	    do_cmdline(eap->arg, eap->getline, eap->cookie,
 						DOCMD_VERBOSE + DOCMD_NOWAIT);
@@ -2621,7 +2570,7 @@ ex_listdo(eap)
 	    if (eap->cmdidx == CMD_bufdo)
 	    {
 		/* Done? */
-		if (next_fnum < 0)
+		if (next_fnum < 0 || next_fnum > eap->line2)
 		    break;
 		/* Check if the buffer still exists. */
 		for (buf = firstbuf; buf != NULL; buf = buf->b_next)
@@ -2652,6 +2601,14 @@ ex_listdo(eap)
 		    do_check_scrollbind(TRUE);
 #endif
 	    }
+
+#ifdef FEAT_WINDOWS
+	    if (eap->cmdidx == CMD_windo || eap->cmdidx == CMD_tabdo)
+		if (i+1 > eap->line2)
+		    break;
+#endif
+	    if (eap->cmdidx == CMD_argdo && i >= eap->line2)
+		break;
 	}
 	listcmd_busy = FALSE;
     }
@@ -2663,6 +2620,9 @@ ex_listdo(eap)
 	apply_autocmds(EVENT_SYNTAX, curbuf->b_p_syn,
 					       curbuf->b_fname, TRUE, curbuf);
     }
+#endif
+#ifdef FEAT_CLIPBOARD
+    end_global_changes();
 #endif
 }
 
@@ -2823,8 +2783,8 @@ source_runtime(name, all)
  * used.
  * Returns OK when at least one match found, FAIL otherwise.
  *
- * If "name" is NULL calls callback for each entry in runtimepath. Cookie is 
- * passed by reference in this case, setting it to NULL indicates that callback 
+ * If "name" is NULL calls callback for each entry in runtimepath. Cookie is
+ * passed by reference in this case, setting it to NULL indicates that callback
  * has done its job.
  */
     int

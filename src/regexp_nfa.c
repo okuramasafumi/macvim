@@ -1323,10 +1323,14 @@ nfa_regatom()
 	    {
 		case 's':
 		    EMIT(NFA_ZSTART);
+		    if (re_mult_next("\\zs") == FAIL)
+			return FAIL;
 		    break;
 		case 'e':
 		    EMIT(NFA_ZEND);
 		    nfa_has_zend = TRUE;
+		    if (re_mult_next("\\ze") == FAIL)
+			return FAIL;
 		    break;
 #ifdef FEAT_SYN_HL
 		case '1':
@@ -4403,7 +4407,6 @@ skip_add:
     switch (state->c)
     {
 	case NFA_MATCH:
-//	    nfa_match = TRUE;
 	    break;
 
 	case NFA_SPLIT:
@@ -5519,6 +5522,13 @@ nfa_regmatch(prog, start, submatch, m)
 	nextlist->n = 0;	    /* clear nextlist */
 	nextlist->has_pim = FALSE;
 	++nfa_listid;
+	if (prog->re_engine == AUTOMATIC_ENGINE && nfa_listid >= NFA_MAX_STATES)
+	{
+	    /* too many states, retry with old engine */
+	    nfa_match = NFA_TOO_EXPENSIVE;
+	    goto theend;
+	}
+
 	thislist->id = nfa_listid;
 	nextlist->id = nfa_listid + 1;
 
@@ -5701,6 +5711,11 @@ nfa_regmatch(prog, start, submatch, m)
 			 */
 			result = recursive_regmatch(t->state, NULL, prog,
 						       submatch, m, &listids);
+			if (result == NFA_TOO_EXPENSIVE)
+			{
+			    nfa_match = result;
+			    goto theend;
+			}
 
 			/* for \@! and \@<! it is a match when the result is
 			 * FALSE */
@@ -5814,6 +5829,11 @@ nfa_regmatch(prog, start, submatch, m)
 		/* First try matching the pattern. */
 		result = recursive_regmatch(t->state, NULL, prog,
 						       submatch, m, &listids);
+		if (result == NFA_TOO_EXPENSIVE)
+		{
+		    nfa_match = result;
+		    goto theend;
+		}
 		if (result)
 		{
 		    int bytelen;
@@ -6418,14 +6438,24 @@ nfa_regmatch(prog, start, submatch, m)
 	    case NFA_VCOL:
 	    case NFA_VCOL_GT:
 	    case NFA_VCOL_LT:
-		result = nfa_re_num_cmp(t->state->val, t->state->c - NFA_VCOL,
-		    (long_u)win_linetabsize(
-			    reg_win == NULL ? curwin : reg_win,
-			    regline, (colnr_T)(reginput - regline)) + 1);
-		if (result)
 		{
-		    add_here = TRUE;
-		    add_state = t->state->out;
+		    int     op = t->state->c - NFA_VCOL;
+		    colnr_T col = (colnr_T)(reginput - regline);
+
+		    /* Bail out quickly when there can't be a match, avoid the
+		     * overhead of win_linetabsize() on long lines. */
+		    if ((col > t->state->val && op != 1)
+			    || (col - 1 > t->state->val && op == 1))
+			break;
+		    result = nfa_re_num_cmp(t->state->val, op,
+			(long_u)win_linetabsize(
+				reg_win == NULL ? curwin : reg_win,
+							   regline, col) + 1);
+		    if (result)
+		    {
+			add_here = TRUE;
+			add_state = t->state->out;
+		    }
 		}
 		break;
 
@@ -6724,6 +6754,11 @@ nextchar:
 	    reg_nextline();
 	else
 	    break;
+
+	/* Allow interrupting with CTRL-C. */
+	fast_breakcheck();
+	if (got_int)
+	    break;
     }
 
 #ifdef ENABLE_LOG
@@ -6747,7 +6782,7 @@ theend:
 
 /*
  * Try match of "prog" with at regline["col"].
- * Returns 0 for failure, number of lines contained in the match otherwise.
+ * Returns <= 0 for failure, number of lines contained in the match otherwise.
  */
     static long
 nfa_regtry(prog, col)
@@ -6757,6 +6792,7 @@ nfa_regtry(prog, col)
     int		i;
     regsubs_T	subs, m;
     nfa_state_T	*start = prog->start;
+    int		result;
 #ifdef ENABLE_LOG
     FILE	*f;
 #endif
@@ -6788,8 +6824,11 @@ nfa_regtry(prog, col)
     clear_sub(&m.synt);
 #endif
 
-    if (nfa_regmatch(prog, start, &subs, &m) == FALSE)
+    result = nfa_regmatch(prog, start, &subs, &m);
+    if (result == FALSE)
 	return 0;
+    else if (result == NFA_TOO_EXPENSIVE)
+	return result;
 
     cleanup_subexpr();
     if (REG_MULTI)
@@ -6873,7 +6912,7 @@ nfa_regtry(prog, col)
  * Match a regexp against a string ("line" points to the string) or multiple
  * lines ("line" is NULL, use reg_getline()).
  *
- * Returns 0 for failure, number of lines contained in the match otherwise.
+ * Returns <= 0 for failure, number of lines contained in the match otherwise.
  */
     static long
 nfa_regexec_both(line, startcol)
@@ -6926,9 +6965,7 @@ nfa_regexec_both(line, startcol)
     nfa_nsubexpr = prog->nsubexp;
     nfa_listid = 1;
     nfa_alt_listid = 2;
-#ifdef DEBUG
     nfa_regengine.expr = prog->pattern;
-#endif
 
     if (prog->reganch && col > 0)
 	return 0L;
@@ -6976,9 +7013,7 @@ nfa_regexec_both(line, startcol)
 
     retval = nfa_regtry(prog, col);
 
-#ifdef DEBUG
     nfa_regengine.expr = NULL;
-#endif
 
 theend:
     return retval;
@@ -7000,9 +7035,7 @@ nfa_regcomp(expr, re_flags)
     if (expr == NULL)
 	return NULL;
 
-#ifdef DEBUG
     nfa_regengine.expr = expr;
-#endif
 
     init_class_tab();
 
@@ -7079,10 +7112,8 @@ nfa_regcomp(expr, re_flags)
     /* Remember whether this pattern has any \z specials in it. */
     prog->reghasz = re_has_z;
 #endif
-#ifdef DEBUG
     prog->pattern = vim_strsave(expr);
     nfa_regengine.expr = NULL;
-#endif
 
 out:
     vim_free(post_start);
@@ -7096,9 +7127,7 @@ fail:
 #ifdef ENABLE_LOG
     nfa_postfix_dump(expr, FAIL);
 #endif
-#ifdef DEBUG
     nfa_regengine.expr = NULL;
-#endif
     goto out;
 }
 
@@ -7112,9 +7141,7 @@ nfa_regfree(prog)
     if (prog != NULL)
     {
 	vim_free(((nfa_regprog_T *)prog)->match_text);
-#ifdef DEBUG
 	vim_free(((nfa_regprog_T *)prog)->pattern);
-#endif
 	vim_free(prog);
     }
 }
@@ -7125,7 +7152,7 @@ nfa_regfree(prog)
  * Uses curbuf for line count and 'iskeyword'.
  * If "line_lbr" is TRUE consider a "\n" in "line" to be a line break.
  *
- * Return TRUE if there is a match, FALSE if not.
+ * Returns <= 0 for failure, number of lines contained in the match otherwise.
  */
     static int
 nfa_regexec_nl(rmp, line, col, line_lbr)
@@ -7145,7 +7172,7 @@ nfa_regexec_nl(rmp, line, col, line_lbr)
     ireg_icombine = FALSE;
 #endif
     ireg_maxcol = 0;
-    return (nfa_regexec_both(line, col) != 0);
+    return nfa_regexec_both(line, col);
 }
 
 
@@ -7154,7 +7181,7 @@ nfa_regexec_nl(rmp, line, col, line_lbr)
  * "rmp->regprog" is a compiled regexp as returned by vim_regcomp().
  * Uses curbuf for line count and 'iskeyword'.
  *
- * Return zero if there is no match.  Return number of lines contained in the
+ * Return <= 0 if there is no match.  Return number of lines contained in the
  * match otherwise.
  *
  * Note: the body is the same as bt_regexec() except for nfa_regexec_both()

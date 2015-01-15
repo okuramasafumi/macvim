@@ -105,10 +105,6 @@ EXTERN int	exec_from_reg INIT(= FALSE);	/* executing register */
 
 EXTERN int	screen_cleared INIT(= FALSE);	/* screen has been cleared */
 
-#ifdef FEAT_CRYPT
-EXTERN int      use_crypt_method INIT(= 0);
-#endif
-
 /*
  * When '$' is included in 'cpoptions' option set:
  * When a change command is given that deletes only part of a line, a dollar
@@ -533,6 +529,8 @@ EXTERN int	clip_autoselect_plus INIT(= FALSE);
 EXTERN int	clip_autoselectml INIT(= FALSE);
 EXTERN int	clip_html INIT(= FALSE);
 EXTERN regprog_T *clip_exclude_prog INIT(= NULL);
+EXTERN int	clip_did_set_selection INIT(= TRUE);
+EXTERN int	clip_unnamed_saved INIT(= 0);
 #endif
 
 /*
@@ -872,10 +870,8 @@ EXTERN int* (*iconv_errno) (void);
 #endif /* FEAT_MBYTE */
 
 #ifdef FEAT_XIM
-# if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
-#  ifndef FEAT_GUI_MACVIM
+# ifdef FEAT_GUI_GTK
 EXTERN GtkIMContext	*xic INIT(= NULL);
-#  endif
 /*
  * Start and end column of the preedit area in virtual columns from the start
  * of the text line.  When there is no preedit area they are set to MAXCOL.
@@ -962,7 +958,7 @@ EXTERN char_u	*exe_name;		/* the name of the executable */
 #ifdef USE_ON_FLY_SCROLL
 EXTERN int	dont_scroll INIT(= FALSE);/* don't use scrollbars when TRUE */
 #endif
-EXTERN int	mapped_ctrl_c INIT(= FALSE); /* CTRL-C is mapped */
+EXTERN int	mapped_ctrl_c INIT(= FALSE); /* modes where CTRL-C is mapped */
 EXTERN int	ctrl_c_interrupts INIT(= TRUE);	/* CTRL-C sets got_int */
 
 EXTERN cmdmod_T	cmdmod;			/* Ex command modifiers */
@@ -1327,21 +1323,16 @@ EXTERN Window	commWindow INIT(= None);
 EXTERN Window	clientWindow INIT(= None);
 EXTERN Atom	commProperty INIT(= None);
 EXTERN char_u	*serverDelayedStartName INIT(= NULL);
-# elif defined(WIN32)
+# else
 #  ifdef PROTO
 typedef int HWND;
 #  endif
 EXTERN HWND	clientWindow INIT(= 0);
-# elif defined(MAC_CLIENTSERVER)
-EXTERN int      clientWindow INIT(= 0);
 # endif
 #endif
 
 #if defined(UNIX) || defined(VMS)
 EXTERN int	term_is_xterm INIT(= FALSE);	/* xterm-like 'term' */
-#endif
-#if defined(UNIX)
-EXTERN int	xterm_conflict_mouse INIT(= FALSE);
 #endif
 
 #ifdef BACKSLASH_IN_FILENAME

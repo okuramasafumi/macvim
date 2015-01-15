@@ -317,8 +317,8 @@ EXTERN int	p_acd;		/* 'autochdir' */
 #ifdef FEAT_MBYTE
 EXTERN char_u	*p_ambw;	/* 'ambiwidth' */
 #endif
-#ifdef FEAT_ANTIALIAS
-EXTERN int	p_antialias;	/* 'antialias' */
+#if defined(FEAT_GUI) && defined(MACOS_X)
+EXTERN int	*p_antialias;	/* 'antialias' */
 #endif
 EXTERN int	p_ar;		/* 'autoread' */
 EXTERN int	p_aw;		/* 'autowrite' */
@@ -327,7 +327,7 @@ EXTERN char_u	*p_bs;		/* 'backspace' */
 EXTERN char_u	*p_bg;		/* 'background' */
 EXTERN int	p_bk;		/* 'backup' */
 EXTERN char_u	*p_bkc;		/* 'backupcopy' */
-EXTERN unsigned	bkc_flags;
+EXTERN unsigned	bkc_flags;	/* flags from 'backupcopy' */
 #ifdef IN_OPTION_C
 static char *(p_bkc_values[]) = {"yes", "auto", "no", "breaksymlink", "breakhardlink", NULL};
 #endif
@@ -481,18 +481,6 @@ EXTERN char_u	*p_fp;		/* 'formatprg' */
 #ifdef HAVE_FSYNC
 EXTERN int	p_fs;		/* 'fsync' */
 #endif
-#ifdef FEAT_FULLSCREEN
-EXTERN int	p_fullscreen;
-EXTERN char_u	*p_fuoptions;
-EXTERN unsigned	fuoptions_flags;
-EXTERN int      fuoptions_bgcolor;
-#define FUOPT_MAXVERT         0x001
-#define FUOPT_MAXHORZ         0x002
-#define FUOPT_BGCOLOR_HLGROUP 0x004    /* if set, fuoptions_bgcolor
-                                          is a highlight group
-                                          id. Else, it's an explicit 
-                                          argb color. */
-#endif
 EXTERN int	p_gd;		/* 'gdefault' */
 #ifdef FEAT_PRINTER
 EXTERN char_u	*p_pdev;	/* 'printdevice' */
@@ -588,6 +576,7 @@ EXTERN char_u	*p_kp;		/* 'keywordprg' */
 EXTERN char_u	*p_km;		/* 'keymodel' */
 #ifdef FEAT_LANGMAP
 EXTERN char_u	*p_langmap;	/* 'langmap'*/
+EXTERN int	p_lnr;		/* 'langnoremap' */
 #endif
 #if defined(FEAT_MENU) && defined(FEAT_MULTI_LANG)
 EXTERN char_u	*p_lm;		/* 'langmenu' */
@@ -667,6 +656,9 @@ EXTERN long	p_rdt;		/* 'redrawtime' */
 #endif
 EXTERN int	p_remap;	/* 'remap' */
 EXTERN long	p_re;		/* 'regexpengine' */
+#ifdef FEAT_RENDER_OPTIONS
+EXTERN char_u	*p_rop;		/* 'renderoptions' */
+#endif
 EXTERN long	p_report;	/* 'report' */
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
 EXTERN long	p_pvh;		/* 'previewheight' */
@@ -804,9 +796,6 @@ EXTERN char_u	*p_titlestring;	/* 'titlestring' */
 #ifdef FEAT_INS_EXPAND
 EXTERN char_u	*p_tsr;		/* 'thesaurus' */
 #endif
-#ifdef FEAT_TRANSPARENCY
-EXTERN long     p_transp;       /* 'transparency' */
-#endif
 EXTERN int	p_ttimeout;	/* 'ttimeout' */
 EXTERN long	p_ttm;		/* 'ttimeoutlen' */
 EXTERN int	p_tbi;		/* 'ttybuiltin' */
@@ -822,7 +811,7 @@ static char *(p_toolbar_values[]) = {"text", "icons", "tooltips", "horiz", NULL}
 # define TOOLBAR_TOOLTIPS	0x04
 # define TOOLBAR_HORIZ		0x08
 #endif
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_TOOLBAR) && defined(FEAT_GUI_GTK)
 EXTERN char_u	*p_tbis;	/* 'toolbariconsize' */
 EXTERN unsigned tbis_flags;
 # ifdef IN_OPTION_C
@@ -930,6 +919,9 @@ enum
     , BV_AR
 #ifdef FEAT_QUICKFIX
     , BV_BH
+#endif
+    , BV_BKC
+#ifdef FEAT_QUICKFIX
     , BV_BT
     , BV_EFM
     , BV_GP
@@ -1008,9 +1000,6 @@ enum
     , BV_ML
     , BV_MOD
     , BV_MPS
-#ifdef FEAT_GUI_MACVIM
-    , BV_MMTA
-#endif
     , BV_NF
 #ifdef FEAT_COMPL_FUNC
     , BV_OFU

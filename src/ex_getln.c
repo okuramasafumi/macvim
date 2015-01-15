@@ -94,7 +94,7 @@ static void	draw_cmdline __ARGS((int start, int len));
 static void	save_cmdline __ARGS((struct cmdline_info *ccp));
 static void	restore_cmdline __ARGS((struct cmdline_info *ccp));
 static int	cmdline_paste __ARGS((int regname, int literally, int remcr));
-#if defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 static void	redrawcmd_preedit __ARGS((void));
 #endif
 #ifdef FEAT_WILDMENU
@@ -759,11 +759,14 @@ getcmdline(firstc, count, indent)
 #ifdef FEAT_CMDWIN
 	if (c == cedit_key || c == K_CMDWIN)
 	{
-	    /*
-	     * Open a window to edit the command line (and history).
-	     */
-	    c = ex_window();
-	    some_key_typed = TRUE;
+	    if (ex_normal_busy == 0 && got_int == FALSE)
+	    {
+		/*
+		 * Open a window to edit the command line (and history).
+		 */
+		c = ex_window();
+		some_key_typed = TRUE;
+	    }
 	}
 # ifdef FEAT_DIGRAPHS
 	else
@@ -1381,14 +1384,6 @@ getcmdline(firstc, count, indent)
 	case K_X2RELEASE:
 		goto cmdline_not_changed;
 
-# ifdef FEAT_GUI_MACVIM
-	/* Gestures are ignored */
-	case K_SWIPELEFT:
-	case K_SWIPERIGHT:
-	case K_SWIPEUP:
-	case K_SWIPEDOWN:
-		goto cmdline_not_changed;
-# endif
 #endif	/* FEAT_MOUSE */
 
 #ifdef FEAT_GUI
@@ -2489,8 +2484,7 @@ cmdline_at_end()
 }
 #endif
 
-#if (defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))) \
-	|| defined(PROTO)
+#if (defined(FEAT_XIM) && (defined(FEAT_GUI_GTK))) || defined(PROTO)
 /*
  * Return the virtual column number at the current cursor position.
  * This is used by the IM code to obtain the start of the preedit string.
@@ -2518,7 +2512,7 @@ cmdline_getvcol_cursor()
 }
 #endif
 
-#if defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 /*
  * If part of the command line is an IM preedit string, redraw it with
  * IM feedback attributes.  The cursor position is restored after drawing.
@@ -2527,9 +2521,7 @@ cmdline_getvcol_cursor()
 redrawcmd_preedit()
 {
     if ((State & CMDLINE)
-# ifndef FEAT_GUI_MACVIM
 	    && xic != NULL
-# endif
 	    /* && im_get_status()  doesn't work when using SCIM */
 	    && !p_imdisable
 	    && im_is_preediting())
@@ -2590,7 +2582,7 @@ redrawcmd_preedit()
 	msg_col = old_col;
     }
 }
-#endif /* FEAT_XIM && (FEAT_GUI_GTK || FEAT_GUI_MACVIM) */
+#endif /* FEAT_XIM && FEAT_GUI_GTK */
 
 /*
  * Allocate a new command line buffer.
@@ -3326,7 +3318,7 @@ cursorcmd()
     }
 
     windgoto(msg_row, msg_col);
-#if defined(FEAT_XIM) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
     redrawcmd_preedit();
 #endif
 #ifdef MCH_CURSOR_SHAPE
@@ -4705,6 +4697,7 @@ ExpandFromContext(xp, pat, num_file, file, options)
 #endif
 #ifdef FEAT_USR_CMDS
 	    {EXPAND_USER_COMMANDS, get_user_commands, FALSE, TRUE},
+	    {EXPAND_USER_ADDR_TYPE, get_user_cmd_addr_type, FALSE, TRUE},
 	    {EXPAND_USER_CMD_FLAGS, get_user_cmd_flags, FALSE, TRUE},
 	    {EXPAND_USER_NARGS, get_user_cmd_nargs, FALSE, TRUE},
 	    {EXPAND_USER_COMPLETE, get_user_cmd_complete, FALSE, TRUE},
@@ -4746,9 +4739,6 @@ ExpandFromContext(xp, pat, num_file, file, options)
 #endif
 	    {EXPAND_ENV_VARS, get_env_name, TRUE, TRUE},
 	    {EXPAND_USER, get_users, TRUE, FALSE},
-#ifdef FEAT_GUI_MACVIM
-	    {EXPAND_MACACTION, get_macaction_name, FALSE, FALSE},
-#endif
 	};
 	int	i;
 
@@ -6377,6 +6367,9 @@ ex_window()
 #ifdef FEAT_RIGHTLEFT
     int			save_cmdmsg_rl = cmdmsg_rl;
 #endif
+#ifdef FEAT_FOLDING
+    int			save_KeyTyped;
+#endif
 
     /* Can't do this recursively.  Can't do it when typing a password. */
     if (cmdwin_type != 0
@@ -6511,8 +6504,19 @@ ex_window()
     RedrawingDisabled = i;
 
 # ifdef FEAT_AUTOCMD
+
+#  ifdef FEAT_FOLDING
+    save_KeyTyped = KeyTyped;
+#  endif
+
     /* Trigger CmdwinLeave autocommands. */
     apply_autocmds(EVENT_CMDWINLEAVE, typestr, typestr, FALSE, curbuf);
+
+#  ifdef FEAT_FOLDING
+    /* Restore KeyTyped in case it is modified by autocommands */
+    KeyTyped = save_KeyTyped;
+#  endif
+
 # endif
 
     /* Restore the command line info. */

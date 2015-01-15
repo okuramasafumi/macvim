@@ -41,7 +41,7 @@
 # include <Events.h>
 # include <Menus.h>
 # if !(defined (TARGET_API_MAC_CARBON) && (TARGET_API_MAC_CARBON))
-#   include <Windows.h>
+#  include <Windows.h>
 # endif
 # include <Controls.h>
 /*# include <TextEdit.h>*/
@@ -62,8 +62,7 @@
  * On some systems scrolling needs to be done right away instead of in the
  * main loop.
  */
-#if defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_MAC) || defined(FEAT_GUI_GTK) \
-    || defined(FEAT_GUI_MACVIM)
+#if defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_MAC) || defined(FEAT_GUI_GTK)
 # define USE_ON_FLY_SCROLL
 #endif
 
@@ -139,12 +138,10 @@
 #define DRAW_BOLD		0x02	/* draw bold text */
 #define DRAW_UNDERL		0x04	/* draw underline text */
 #define DRAW_UNDERC		0x08	/* draw undercurl text */
-#if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
+#if defined(FEAT_GUI_GTK)
 # define DRAW_ITALIC		0x10	/* draw italic text */
 #endif
 #define DRAW_CURSOR		0x20	/* drawing block cursor (win32) */
-#define DRAW_WIDE		0x40	/* drawing wide char (MacVim) */
-#define DRAW_COMP		0x80	/* drawing composing char (MacVim) */
 
 /* For our own tearoff menu item */
 #define TEAR_STRING		"-->Detach"
@@ -221,12 +218,7 @@ typedef long	    guicolor_T;	/* handle for a GUI color; for X11 this should
 				   displays there is a tiny chance this is an
 				   actual color */
 
-#if defined(FEAT_GUI_MACVIM)
-  typedef void		*GuiFont;
-  typedef void		*GuiFontset;
-# define NOFONT		(GuiFont)NULL
-# define NOFONTSET	(GuiFontset)NULL
-#elif defined(FEAT_GUI_GTK)
+#ifdef FEAT_GUI_GTK
   typedef PangoFontDescription	*GuiFont;       /* handle for a GUI font */
   typedef PangoFontDescription  *GuiFontset;    /* handle for a GUI fontset */
 # define NOFONT		(GuiFont)NULL
@@ -281,7 +273,7 @@ typedef struct Gui
     int		right_sbar_x;	    /* Calculated x coord for right scrollbar */
 
 #ifdef FEAT_MENU
-# if !(defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM))
+# ifndef FEAT_GUI_GTK
     int		menu_height;	    /* Height of the menu bar */
     int		menu_width;	    /* Width of the menu bar */
 # endif
@@ -466,13 +458,9 @@ typedef struct Gui
     PhEvent_t	*event_buffer;
 #endif
 
-#if defined(FEAT_XIM) && !defined(FEAT_GUI_MACVIM)
+#ifdef FEAT_XIM
     char	*rsrc_input_method;
     char	*rsrc_preedit_type_name;
-#endif
-
-#ifdef FEAT_GUI_SCROLL_WHEEL_FORCE
-    int		scroll_wheel_force;
 #endif
 } gui_T;
 
@@ -503,7 +491,7 @@ typedef enum
 # define FRD_MATCH_CASE	0x10	/* match case */
 #endif
 
-#if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
+#ifdef FEAT_GUI_GTK
 /*
  * Convenience macros to convert from 'encoding' to 'termencoding' and
  * vice versa.	If no conversion is necessary the passed-in pointer is
